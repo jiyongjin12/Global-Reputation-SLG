@@ -440,7 +440,7 @@ Transform:
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
   m_LocalRotation: {x: 0.38268343, y: 0, z: 0, w: 0.92387956}
-  m_LocalPosition: {x: 0, y: 4.89, z: -6.7}
+  m_LocalPosition: {x: 0, y: 6.25, z: -7.04}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1187,7 +1187,7 @@ Transform:
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 1
+  m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 221516402}
   - {fileID: 1129885044}
@@ -1200,7 +1200,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 894807440}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a8f7c6659cba31c4fb28837832b283ea, type: 3}
   m_Name: 
@@ -1209,7 +1209,8 @@ MonoBehaviour:
   gridTotalSize: {x: 10, y: 10}
   cellSize: {x: 1, y: 1}
   gridColor: {r: 1, g: 1, b: 1, a: 1}
-  thickness: 0.05
+  gap: 0.247
+  thickness: 0.1
 --- !u!1 &1129885040
 GameObject:
   m_ObjectHideFlags: 0
