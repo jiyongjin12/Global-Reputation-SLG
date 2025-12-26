@@ -1,0 +1,41 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4458c35ecc373e44bcd247efb66d469, type: 3}
+  m_Name: ResourceNodeDatabase
+  m_EditorClassIdentifier: 
+  resourceNodes:
+  - <Name>k__BackingField: "\uCC38\uB098\uBB34"
+    <ID>k__BackingField: 0
+    <NodeType>k__BackingField: 0
+    <Prefab>k__BackingField: {fileID: 6514400516380827500, guid: 35477bd42202d974a875ca0966cea195, type: 3}
+    <Size>k__BackingField: {x: 1, y: 1}
+    <MaxHP>k__BackingField: 100
+    <HarvestWorkPerHit>k__BackingField: 20
+    <Drops>k__BackingField:
+    - <Resource>k__BackingField: {fileID: 11400000, guid: 7697bfbb38c55c64fbefa1841da44f9a, type: 2}
+      <MinAmount>k__BackingField: 2
+      <MaxAmount>k__BackingField: 4
+    <CanRespawn>k__BackingField: 0
+    <RespawnTime>k__BackingField: 0
+  - <Name>k__BackingField: "\uB3CC\uBB34\uB354\uAE30"
+    <ID>k__BackingField: 1
+    <NodeType>k__BackingField: 1
+    <Prefab>k__BackingField: {fileID: 8945074881337893121, guid: d6c715ead9f324c4782bf77fbc908283, type: 3}
+    <Size>k__BackingField: {x: 2, y: 2}
+    <MaxHP>k__BackingField: 200
+    <HarvestWorkPerHit>k__BackingField: 20
+    <Drops>k__BackingField:
+    - <Resource>k__BackingField: {fileID: 11400000, guid: 07793162378ff2347ba23d12b899f785, type: 2}
+      <MinAmount>k__BackingField: 5
+      <MaxAmount>k__BackingField: 7
+    <CanRespawn>k__BackingField: 0
+    <RespawnTime>k__BackingField: 0

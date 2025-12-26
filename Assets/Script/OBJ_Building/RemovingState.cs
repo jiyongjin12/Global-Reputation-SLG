@@ -11,21 +11,14 @@ public class RemovingState : IBuildingState
     GridData floorData;
     GridData furnitureData;
     ObjectPlacer objectPlacer;
-    //SoundFeedback soundFeedback;
 
-    public RemovingState(Grid grid,
-                         PreviewSystem previewSystem,
-                         GridData floorData,
-                         GridData furnitureData,
-                         ObjectPlacer objectPlacer)
-                         //SoundFeedback soundFeedback)
+    public RemovingState(Grid grid, PreviewSystem previewSystem, GridData floorData, GridData furnitureData, ObjectPlacer objectPlacer)
     {
         this.grid = grid;
         this.previewSystem = previewSystem;
         this.floorData = floorData;
         this.furnitureData = furnitureData;
         this.objectPlacer = objectPlacer;
-        //this.soundFeedback = soundFeedback;
         previewSystem.StartShowingRemovePreview();
     }
 
@@ -48,18 +41,19 @@ public class RemovingState : IBuildingState
 
         if (selectedData == null)
         {
-            //sound
-            //soundFeedback.PlaySound(SoundType.wrongPlacement);
+            // 아무것도 없음
         }
         else
         {
-            //soundFeedback.PlaySound(SoundType.Remove);
             gameObjectIndex = selectedData.GetRepresentationIndex(gridPosition);
             if (gameObjectIndex == -1)
                 return;
             selectedData.RemoveObjectAt(gridPosition);
             objectPlacer.RemoveObjectAt(gameObjectIndex);
+
+            // TODO: 자원 일부 환불?
         }
+
         Vector3 cellPosition = grid.CellToWorld(gridPosition);
         previewSystem.UpdatePosition(cellPosition, CheckIfSelectionIsValid(gridPosition));
     }
