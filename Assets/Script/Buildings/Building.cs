@@ -12,6 +12,7 @@ public class Building : MonoBehaviour
 
     private float currentConstructionWork = 0f;
     private GameObject currentVisual;
+    private bool isInitialized = false;
 
     // 이벤트
     public event Action<Building> OnConstructionComplete;
@@ -20,19 +21,34 @@ public class Building : MonoBehaviour
     // Properties
     public ObjectData Data => data;
     public BuildingState CurrentState => currentState;
-    public float ConstructionProgress => data.ConstructionWorkRequired > 0
-        ? currentConstructionWork / data.ConstructionWorkRequired
-        : 1f;
+    public float ConstructionProgress
+    {
+        get
+        {
+            if (data == null) return 0f;
+            return data.ConstructionWorkRequired > 0
+                ? currentConstructionWork / data.ConstructionWorkRequired
+                : 1f;
+        }
+    }
     public bool NeedsConstruction => currentState == BuildingState.Blueprint;
     public Vector3Int GridPosition { get; private set; }
+    public bool IsInitialized => isInitialized;
 
     /// <summary>
     /// 건물 초기화
     /// </summary>
     public void Initialize(ObjectData objectData, Vector3Int gridPos, bool instantBuild = false)
     {
+        if (objectData == null)
+        {
+            Debug.LogError("[Building] Initialize failed: objectData is null!");
+            return;
+        }
+
         data = objectData;
         GridPosition = gridPos;
+        isInitialized = true;
 
         if (instantBuild || data.ConstructionWorkRequired <= 0)
         {
@@ -52,6 +68,8 @@ public class Building : MonoBehaviour
     /// <returns>건설 완료 여부</returns>
     public bool DoConstructionWork(float workAmount)
     {
+        if (data == null) return true;  // 데이터 없으면 완료 처리
+
         if (currentState == BuildingState.Completed)
             return true;
 
@@ -79,12 +97,15 @@ public class Building : MonoBehaviour
 
     private void CompleteConstruction()
     {
-        currentConstructionWork = data.ConstructionWorkRequired;
+        if (data != null)
+        {
+            currentConstructionWork = data.ConstructionWorkRequired;
+            Debug.Log($"[Building] {data.Name} construction completed!");
+        }
+
         SetState(BuildingState.Completed);
         UpdateVisual();
         OnConstructionComplete?.Invoke(this);
-
-        Debug.Log($"[Building] {data.Name} construction completed!");
     }
 
     private void SetState(BuildingState newState)

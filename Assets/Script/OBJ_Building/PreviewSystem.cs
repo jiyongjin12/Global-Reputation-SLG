@@ -24,8 +24,23 @@ public class PreviewSystem : MonoBehaviour
 
     public void StartShowingPlacementPreview(GameObject prefab, Vector2Int size)
     {
-        previewObject = Instantiate(prefab);
-        PreparePreview(previewObject);
+        // null 체크 추가
+        if (prefab != null)
+        {
+            previewObject = Instantiate(prefab);
+            PreparePreview(previewObject);
+        }
+
+        PrepareCursor(size);
+        cellIndicator.SetActive(true);
+    }
+
+    /// <summary>
+    /// 프리팹 없이 커서만 표시 (Floor 등 즉시 설치용)
+    /// </summary>
+    public void StartShowingPlacementPreviewCursorOnly(Vector2Int size)
+    {
+        previewObject = null;
         PrepareCursor(size);
         cellIndicator.SetActive(true);
     }
@@ -66,7 +81,6 @@ public class PreviewSystem : MonoBehaviour
         {
             MovePreview(position);
             ApplyFeedbackToPreview(validity);
-
         }
 
         MoveCursor(position);
@@ -76,7 +90,6 @@ public class PreviewSystem : MonoBehaviour
     private void ApplyFeedbackToPreview(bool validity)
     {
         Color c = validity ? Color.white : Color.red;
-
         c.a = 0.5f;
         previewMaterialInstance.color = c;
     }
@@ -84,7 +97,6 @@ public class PreviewSystem : MonoBehaviour
     private void ApplyFeedbackToCursor(bool validity)
     {
         Color c = validity ? Color.green : Color.red;
-
         c.a = 0.5f;
         cellIndicatorRenderer.material.color = c;
     }

@@ -45,11 +45,12 @@ public class Unit : MonoBehaviour
     [SerializeField] private List<UnitTraitSO> traits = new List<UnitTraitSO>();
 
     [Header("Settings")]
-    [SerializeField] private float hungerDecreaseRate = 1f; // 초당 배고픔 감소량
+    [SerializeField] private float hungerDecreaseRate = 0.05f; // 초당 배고픔 감소량 (분당 3 = 약 33분 후 0)
     [SerializeField] private float loyaltyDecreaseRate = 0.1f; // 초당 충성심 감소량 (불만족 시)
 
     // Components
     private NavMeshAgent agent;
+    private UnitAI unitAI;  // AI 컴포넌트 (선택적)
 
     // State
     private UnitState currentState = UnitState.Idle;
@@ -64,8 +65,9 @@ public class Unit : MonoBehaviour
     public List<UnitTraitSO> Traits => traits;
     public UnitState CurrentState => currentState;
     public UnitTask CurrentTask => currentTask;
-    public bool IsIdle => currentState == UnitState.Idle && currentTask == null;
-    public bool HasTask => currentTask != null;
+    public bool IsIdle => currentState == UnitState.Idle && currentTask == null && taskQueue.Count == 0;
+    public bool HasTask => currentTask != null || taskQueue.Count > 0;
+    public bool HasAI => unitAI != null;
 
     // 이벤트
     public event Action<Unit> OnUnitDeath;
@@ -75,6 +77,7 @@ public class Unit : MonoBehaviour
     private void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
+        unitAI = GetComponent<UnitAI>();  // AI 컴포넌트 가져오기 (없을 수도 있음)
     }
 
     private void Start()
@@ -125,8 +128,12 @@ public class Unit : MonoBehaviour
 
     private void UpdateStats()
     {
-        // 배고픔 감소
-        stats.DecreaseHunger(hungerDecreaseRate * Time.deltaTime);
+        // UnitAI가 없을 때만 여기서 배고픔 감소 처리
+        // (UnitAI가 있으면 AI에서 처리)
+        if (unitAI == null)
+        {
+            stats.DecreaseHunger(hungerDecreaseRate * Time.deltaTime);
+        }
 
         // 불만족 상태면 충성심 감소
         if (stats.IsHungry)
@@ -151,8 +158,13 @@ public class Unit : MonoBehaviour
             if (currentTask.IsComplete(this))
             {
                 Debug.Log($"[Unit] {unitName}: 작업 완료 - {currentTask.Type}");
+                UnitTask completedTask = currentTask;
                 currentTask.Complete(this);
-                OnTaskCompleted?.Invoke(this, currentTask);
+                OnTaskCompleted?.Invoke(this, completedTask);
+
+                // UnitAI에게 알림
+                unitAI?.OnTaskCompleted(completedTask);
+
                 currentTask = null;
             }
             else

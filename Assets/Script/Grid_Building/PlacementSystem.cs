@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -18,7 +17,6 @@ public class PlacementSystem : MonoBehaviour
 
     private GridData floorData, furnitureData;
 
-    // 추가: 환경 GridData (MapGenerator에서 가져옴)
     [SerializeField]
     private MapGenerator mapGenerator;
 
@@ -32,8 +30,12 @@ public class PlacementSystem : MonoBehaviour
 
     IBuildingState buildingState;
 
-    // 추가: 이벤트
+    // 추가: 배치된 건물 추적 (GridPosition -> GameObject)
+    private Dictionary<Vector3Int, GameObject> placedBuildings = new Dictionary<Vector3Int, GameObject>();
+
+    // 이벤트
     public event Action<Building> OnBuildingPlaced;
+    public event Action<GameObject> OnBuildingRemoved;
     public event Action<string> OnPlacementFailed;
 
     private void Start()
@@ -47,7 +49,6 @@ public class PlacementSystem : MonoBehaviour
     {
         StopPlacement();
 
-        // 추가: 자원 체크
         ObjectData data = database.GetObjectByID(ID);
         if (data == null)
         {
@@ -55,6 +56,7 @@ public class PlacementSystem : MonoBehaviour
             return;
         }
 
+        // 자원 체크
         if (data.ConstructionCosts != null && data.ConstructionCosts.Length > 0)
         {
             if (!ResourceManager.Instance.CanAfford(data.ConstructionCosts))
@@ -67,7 +69,6 @@ public class PlacementSystem : MonoBehaviour
 
         gridVisualization.SetActive(true);
 
-        // 환경 GridData 가져오기
         GridData envData = mapGenerator != null ? mapGenerator.GetEnvironmentGridData() : null;
 
         buildingState = new PlacementState(
@@ -79,7 +80,8 @@ public class PlacementSystem : MonoBehaviour
             furnitureData,
             objectPlacer,
             envData,
-            OnBuildingPlacedInternal  // 콜백 전달
+            placedBuildings,  // 건물 추적용 Dictionary 전달
+            OnBuildingPlacedInternal
         );
 
         inputManager.OnClicked += PlaceStructure;
@@ -90,7 +92,15 @@ public class PlacementSystem : MonoBehaviour
     {
         StopPlacement();
         gridVisualization.SetActive(true);
-        buildingState = new RemovingState(grid, preview, floorData, furnitureData, objectPlacer);
+        buildingState = new RemovingState(
+            grid,
+            preview,
+            floorData,
+            furnitureData,
+            objectPlacer,
+            placedBuildings,  // 건물 추적용 Dictionary 전달
+            OnBuildingRemovedInternal
+        );
         inputManager.OnClicked += PlaceStructure;
         inputManager.OnExit += StopPlacement;
     }
@@ -132,19 +142,31 @@ public class PlacementSystem : MonoBehaviour
         }
     }
 
-    // 추가: 건물 배치 완료 콜백
     private void OnBuildingPlacedInternal(Building building)
     {
         OnBuildingPlaced?.Invoke(building);
 
-        // TaskManager에 건설 작업 추가
-        if (building.NeedsConstruction)
+        if (building != null && building.NeedsConstruction)
         {
             TaskManager.Instance?.AddConstructionTask(building);
         }
     }
 
-    // 추가: GridData 접근용 (외부에서 필요시)
+    private void OnBuildingRemovedInternal(GameObject removedObj)
+    {
+        OnBuildingRemoved?.Invoke(removedObj);
+        Debug.Log($"[PlacementSystem] 건물 제거됨: {removedObj?.name}");
+    }
+
+    // GridData 접근용
     public GridData GetFloorData() => floorData;
     public GridData GetFurnitureData() => furnitureData;
+
+    /// <summary>
+    /// 특정 위치의 건물 가져오기
+    /// </summary>
+    public GameObject GetBuildingAt(Vector3Int gridPosition)
+    {
+        return placedBuildings.TryGetValue(gridPosition, out var obj) ? obj : null;
+    }
 }

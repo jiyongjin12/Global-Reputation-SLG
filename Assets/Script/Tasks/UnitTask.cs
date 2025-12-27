@@ -328,3 +328,153 @@ public class DeliverToStorageTask : UnitTask
         return unit.Inventory.IsEmpty;
     }
 }
+
+/// <summary>
+/// 음식 먹기 작업
+/// </summary>
+public class EatFoodTask : UnitTask
+{
+    private DroppedItem targetFood;
+    private bool hasEaten = false;
+
+    public EatFoodTask(DroppedItem food, TaskPriority priority = TaskPriority.Critical)
+    {
+        Type = TaskType.Eat;
+        Priority = priority;
+        targetFood = food;
+
+        if (food != null)
+        {
+            TargetObject = food.gameObject;
+            TargetPosition = food.transform.position;
+        }
+    }
+
+    public override void Start(Unit unit)
+    {
+        base.Start(unit);
+        targetFood?.Reserve(unit);
+        Debug.Log($"[EatFoodTask] {unit.UnitName} 음식 먹기 시작");
+    }
+
+    public override void Execute(Unit unit)
+    {
+        if (hasEaten) return;
+
+        if (targetFood == null)
+        {
+            hasEaten = true;
+            return;
+        }
+
+        float dist = Vector3.Distance(unit.transform.position, TargetPosition);
+        if (dist < 1f)
+        {
+            // 음식 먹기
+            if (targetFood.Resource != null && targetFood.Resource.IsFood)
+            {
+                float nutrition = targetFood.Resource.NutritionValue * targetFood.Amount;
+                unit.Stats.Eat(nutrition);
+
+                // 체력 회복도 있으면 적용
+                if (targetFood.Resource.HealthRestore > 0)
+                {
+                    unit.Stats.Heal(targetFood.Resource.HealthRestore * targetFood.Amount);
+                }
+
+                Debug.Log($"[EatFoodTask] {unit.UnitName} 음식 먹음! 영양: {nutrition}");
+
+                // AI에게 알림
+                var ai = unit.GetComponent<UnitAI>();
+                ai?.OnFoodEaten(nutrition);
+            }
+
+            targetFood.PickUp(unit);  // 아이템 제거
+            hasEaten = true;
+        }
+    }
+
+    public override bool IsComplete(Unit unit)
+    {
+        return hasEaten || targetFood == null;
+    }
+
+    public override void Cancel()
+    {
+        base.Cancel();
+        targetFood?.CancelReservation();
+    }
+}
+
+/// <summary>
+/// 서성이기 작업 (자유 행동용)
+/// </summary>
+public class WanderTask : UnitTask
+{
+    private float duration;
+    private float startTime;
+    private bool hasArrived = false;
+
+    public WanderTask(Vector3 destination, float wanderDuration = 5f, TaskPriority priority = TaskPriority.Low)
+    {
+        Type = TaskType.Idle;  // 서성이기는 Idle 타입으로 분류
+        Priority = priority;
+        TargetPosition = destination;
+        duration = wanderDuration;
+    }
+
+    public override void Start(Unit unit)
+    {
+        base.Start(unit);
+        startTime = Time.time;
+        unit.MoveTo(TargetPosition);
+    }
+
+    public override void Execute(Unit unit)
+    {
+        float dist = Vector3.Distance(unit.transform.position, TargetPosition);
+        if (dist < 1f)
+        {
+            hasArrived = true;
+        }
+    }
+
+    public override bool IsComplete(Unit unit)
+    {
+        // 도착했거나 시간이 다 됐으면 완료
+        return hasArrived || (Time.time - startTime >= duration);
+    }
+}
+
+/// <summary>
+/// 대기 작업 (제자리에서 가만히)
+/// </summary>
+public class IdleWaitTask : UnitTask
+{
+    private float duration;
+    private float startTime;
+
+    public IdleWaitTask(float waitDuration = 3f, TaskPriority priority = TaskPriority.Low)
+    {
+        Type = TaskType.Idle;
+        Priority = priority;
+        duration = waitDuration;
+    }
+
+    public override void Start(Unit unit)
+    {
+        base.Start(unit);
+        startTime = Time.time;
+        unit.StopMoving();
+    }
+
+    public override void Execute(Unit unit)
+    {
+        // 아무것도 안 함 - 그냥 대기
+    }
+
+    public override bool IsComplete(Unit unit)
+    {
+        return Time.time - startTime >= duration;
+    }
+}

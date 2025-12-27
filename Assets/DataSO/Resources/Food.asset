@@ -14,6 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   <ResourceName>k__BackingField: Food
   <ID>k__BackingField: 2
-  <Icon>k__BackingField: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
-  <DropPrefab>k__BackingField: {fileID: 0}
+  <Category>k__BackingField: 0
   <Description>k__BackingField: "\uC74C\uC2DD"
+  <Icon>k__BackingField: {fileID: 10907, guid: 0000000000000000f000000000000000, type: 0}
+  <DropPrefab>k__BackingField: {fileID: 6122101663723949460, guid: 1d47cdc04f253734890f0916dff622cf, type: 3}
+  <MaxStackSize>k__BackingField: 99
+  <BaseValue>k__BackingField: 1
+  <NutritionValue>k__BackingField: 0
+  <HealthRestore>k__BackingField: 0

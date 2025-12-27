@@ -1115,7 +1115,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 2, y: 1, z: 2}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -1327,7 +1327,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   visualPlane: {fileID: 1129885040}
-  gridTotalSize: {x: 10, y: 10}
+  gridTotalSize: {x: 20, y: 20}
   cellSize: {x: 1, y: 1}
   gridColor: {r: 1, g: 1, b: 1, a: 1}
   gap: 0.247
@@ -1485,7 +1485,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0.01, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 2, y: 1, z: 2}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 894807441}
@@ -1997,6 +1997,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ad0585d5cbcf0bd48a980de8fbd152b3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  itemDatabase: {fileID: 11400000, guid: 2e43cfaa8db77ac449d8405ef1e43181, type: 2}
+  startingResources:
+  - <Resource>k__BackingField: {fileID: 11400000, guid: 07793162378ff2347ba23d12b899f785, type: 2}
+    <Amount>k__BackingField: 100
+  - <Resource>k__BackingField: {fileID: 11400000, guid: 7697bfbb38c55c64fbefa1841da44f9a, type: 2}
+    <Amount>k__BackingField: 100
+  showDebugLogs: 1
 --- !u!1 &1425124454
 GameObject:
   m_ObjectHideFlags: 0
@@ -2126,6 +2133,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   storageBuilding: {fileID: 0}
   taskAssignInterval: 0.5
+  maxWorkersPerBuilding: 3
+  assignToAIUnits: 1
 --- !u!1 &1862973936
 GameObject:
   m_ObjectHideFlags: 0
@@ -2213,6 +2222,10 @@ PrefabInstance:
     - target: {fileID: 7031335597307464385, guid: 7ebbcea7fdbcd414bbbe280141113f5c, type: 3}
       propertyPath: m_Name
       value: TestUnit
+      objectReference: {fileID: 0}
+    - target: {fileID: 7031335597307464385, guid: 7ebbcea7fdbcd414bbbe280141113f5c, type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

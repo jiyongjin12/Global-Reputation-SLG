@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class PlacementState : IBuildingState
@@ -11,14 +12,20 @@ public class PlacementState : IBuildingState
     GridData floorData;
     GridData furnitureData;
     ObjectPlacer objectPlacer;
-
-    // 추가: 환경 GridData (자연환경 충돌 체크용)
     GridData environmentData;
-
-    // 추가: 건물 배치 콜백
+    Dictionary<Vector3Int, GameObject> placedBuildings;
     Action<Building> onBuildingPlaced;
 
-    public PlacementState(int iD, Grid grid, PreviewSystem previewSystem, ObjectsDatabaseSO database, GridData floorData, GridData furnitureData, ObjectPlacer objectPlacer, GridData environmentData = null, Action<Building> onBuildingPlaced = null)
+    public PlacementState(int iD,
+                          Grid grid,
+                          PreviewSystem previewSystem,
+                          ObjectsDatabaseSO database,
+                          GridData floorData,
+                          GridData furnitureData,
+                          ObjectPlacer objectPlacer,
+                          GridData environmentData = null,
+                          Dictionary<Vector3Int, GameObject> placedBuildings = null,
+                          Action<Building> onBuildingPlaced = null)
     {
         ID = iD;
         this.grid = grid;
@@ -28,21 +35,32 @@ public class PlacementState : IBuildingState
         this.furnitureData = furnitureData;
         this.objectPlacer = objectPlacer;
         this.environmentData = environmentData;
+        this.placedBuildings = placedBuildings ?? new Dictionary<Vector3Int, GameObject>();
         this.onBuildingPlaced = onBuildingPlaced;
 
         selectedObjectIndex = database.objectsData.FindIndex(data => data.ID == ID);
         if (selectedObjectIndex > -1)
         {
-            // Blueprint 프리팹이 있으면 사용, 없으면 기존 Prefab 사용
-            GameObject previewPrefab = database.objectsData[selectedObjectIndex].BlueprintPrefab
-                ?? database.objectsData[selectedObjectIndex].Prefab;
+            ObjectData objData = database.objectsData[selectedObjectIndex];
 
-            previewSystem.StartShowingPlacementPreview(
-                previewPrefab,
-                database.objectsData[selectedObjectIndex].Size);
+            // Blueprint 프리팹이 있으면 사용, 없으면 기존 Prefab 사용
+            GameObject previewPrefab = objData.BlueprintPrefab ?? objData.Prefab;
+
+            // null 체크 - 프리팹이 없으면 커서만 표시
+            if (previewPrefab != null)
+            {
+                previewSystem.StartShowingPlacementPreview(previewPrefab, objData.Size);
+            }
+            else
+            {
+                // 프리팹 없이 커서만 표시
+                previewSystem.StartShowingPlacementPreviewCursorOnly(objData.Size);
+            }
         }
         else
+        {
             throw new System.Exception($"No object with ID {iD}");
+        }
     }
 
     public void EndState()
@@ -72,6 +90,8 @@ public class PlacementState : IBuildingState
         }
 
         Vector3 worldPos = grid.CellToWorld(gridPosition);
+        GameObject placedObject = null;
+        Building building = null;
 
         // 건설 작업이 필요한 경우 (ConstructionWorkRequired > 0)
         if (objectData.ConstructionWorkRequired > 0)
@@ -80,23 +100,51 @@ public class PlacementState : IBuildingState
             GameObject buildingObj = new GameObject($"Building_{objectData.Name}");
             buildingObj.transform.position = worldPos;
 
-            Building building = buildingObj.AddComponent<Building>();
+            building = buildingObj.AddComponent<Building>();
             building.Initialize(objectData, gridPosition, instantBuild: false);
 
-            // GridData에 등록
-            GridData selectedData = objectData.ID == 0 ? floorData : furnitureData;
-            selectedData.AddObjectAt(gridPosition, objectData.Size, objectData.ID, 0);
-
-            // 콜백 호출 (TaskManager에 건설 작업 등록용)
-            onBuildingPlaced?.Invoke(building);
+            placedObject = buildingObj;
         }
         else
         {
-            // 기존 방식: 즉시 건설 (ConstructionWorkRequired가 0인 경우)
-            int index = objectPlacer.PlaceObject(objectData.Prefab, worldPos);
+            // 즉시 건설 (ConstructionWorkRequired가 0인 경우)
+            if (objectData.Prefab != null)
+            {
+                placedObject = UnityEngine.Object.Instantiate(objectData.Prefab);
+                placedObject.transform.position = worldPos;
+                placedObject.name = $"Building_{objectData.Name}";
 
-            GridData selectedData = objectData.ID == 0 ? floorData : furnitureData;
-            selectedData.AddObjectAt(gridPosition, objectData.Size, objectData.ID, index);
+                // Building 컴포넌트 추가 (완료 상태)
+                building = placedObject.AddComponent<Building>();
+                building.Initialize(objectData, gridPosition, instantBuild: true);
+            }
+            else
+            {
+                Debug.LogWarning($"Prefab이 없습니다: {objectData.Name}");
+            }
+        }
+
+        // GridData에 등록
+        GridData selectedData = objectData.ID == 0 ? floorData : furnitureData;
+        selectedData.AddObjectAt(gridPosition, objectData.Size, objectData.ID, 0);
+
+        // 배치된 건물 추적 (크기가 1보다 큰 건물은 모든 셀에 등록)
+        if (placedObject != null)
+        {
+            for (int x = 0; x < objectData.Size.x; x++)
+            {
+                for (int y = 0; y < objectData.Size.y; y++)
+                {
+                    Vector3Int cellPos = gridPosition + new Vector3Int(x, 0, y);
+                    placedBuildings[cellPos] = placedObject;
+                }
+            }
+        }
+
+        // 콜백 호출
+        if (building != null)
+        {
+            onBuildingPlaced?.Invoke(building);
         }
 
         previewSystem.UpdatePosition(grid.CellToWorld(gridPosition), false);
@@ -107,11 +155,9 @@ public class PlacementState : IBuildingState
         ObjectData objectData = database.objectsData[selectedObjectIndex];
         GridData selectedData = objectData.ID == 0 ? floorData : furnitureData;
 
-        // 기존 체크
         if (!selectedData.CanPlaceObejctAt(gridPosition, objectData.Size))
             return false;
 
-        // 추가: 환경 데이터 체크 (나무, 돌 등과 충돌)
         if (environmentData != null && !environmentData.CanPlaceObejctAt(gridPosition, objectData.Size))
             return false;
 

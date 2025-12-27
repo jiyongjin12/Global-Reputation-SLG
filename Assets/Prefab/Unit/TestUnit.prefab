@@ -14,6 +14,8 @@ GameObject:
   - component: {fileID: 147108555943352621}
   - component: {fileID: 7054287790205481348}
   - component: {fileID: 7051656386338999544}
+  - component: {fileID: 7292023293869061039}
+  - component: {fileID: 2947571204303791373}
   m_Layer: 0
   m_Name: TestUnit
   m_TagString: Untagged
@@ -163,3 +165,63 @@ MonoBehaviour:
   traits: []
   hungerDecreaseRate: 1
   loyaltyDecreaseRate: 0.1
+--- !u!114 &7292023293869061039
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7031335597307464385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4238f7ed022f5db488d7ec795a128ce7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  decisionInterval: 1
+  wanderRadius: 10
+  socialDistance: 3
+  foodSearchRadius: 20
+  idleMinTime: 2
+  idleMaxTime: 5
+  wanderMinTime: 3
+  wanderMaxTime: 8
+  hungerDecreasePerMinute: 5
+  hungerSeekThreshold: 50
+  hungerCriticalThreshold: 20
+  maxWorkersPerBuilding: 3
+  maxWorkersPerResource: 2
+  currentBehavior: 0
+  currentBehaviorDetail: 
+--- !u!114 &2947571204303791373
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7031335597307464385}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31ea73d3eef48b94f81aa97bd1196b82, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  baseSpeed: 3.5
+  runSpeed: 5
+  walkSpeed: 2
+  strollSpeed: 1.5
+  enableNaturalMovement: 1
+  pathDeviationChance: 0.3
+  maxDeviation: 2
+  deviationCheckInterval: 1.5
+  enableSpeedVariation: 1
+  speedVariationAmount: 0.3
+  speedChangeInterval: 2
+  enableRandomPauses: 1
+  pauseChance: 0.1
+  minPauseDuration: 0.3
+  maxPauseDuration: 1.5
+  enableLookAround: 1
+  lookAroundChance: 0.2
+  lookAroundDuration: 1
+  currentStyle: 1
+  isMoving: 0
+  isPaused: 0
