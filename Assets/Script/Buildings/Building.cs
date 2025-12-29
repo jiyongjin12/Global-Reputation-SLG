@@ -1,10 +1,6 @@
 using System;
 using UnityEngine;
 
-/// <summary>
-/// 배치된 건물에 붙는 컴포넌트
-/// 건설 진행 상황 및 상태 관리
-/// </summary>
 public class Building : MonoBehaviour
 {
     [SerializeField] private ObjectData data;
@@ -12,37 +8,25 @@ public class Building : MonoBehaviour
 
     private float currentConstructionWork = 0f;
     private GameObject currentVisual;
+    private PostedTask constructionTask;
     private bool isInitialized = false;
 
-    // 이벤트
     public event Action<Building> OnConstructionComplete;
-    public event Action<Building, float> OnConstructionProgress; // (building, progress 0~1)
+    public event Action<Building, float> OnConstructionProgress;
 
-    // Properties
     public ObjectData Data => data;
     public BuildingState CurrentState => currentState;
-    public float ConstructionProgress
-    {
-        get
-        {
-            if (data == null) return 0f;
-            return data.ConstructionWorkRequired > 0
-                ? currentConstructionWork / data.ConstructionWorkRequired
-                : 1f;
-        }
-    }
-    public bool NeedsConstruction => currentState == BuildingState.Blueprint;
     public Vector3Int GridPosition { get; private set; }
+    public bool NeedsConstruction => currentState == BuildingState.Blueprint || currentState == BuildingState.UnderConstruction;
     public bool IsInitialized => isInitialized;
+    public float ConstructionProgress => data != null && data.ConstructionWorkRequired > 0
+        ? currentConstructionWork / data.ConstructionWorkRequired : 1f;
 
-    /// <summary>
-    /// 건물 초기화
-    /// </summary>
     public void Initialize(ObjectData objectData, Vector3Int gridPos, bool instantBuild = false)
     {
         if (objectData == null)
         {
-            Debug.LogError("[Building] Initialize failed: objectData is null!");
+            Debug.LogError("[Building] Initialize failed!");
             return;
         }
 
@@ -58,73 +42,75 @@ public class Building : MonoBehaviour
         {
             SetState(BuildingState.Blueprint);
             UpdateVisual();
+            RegisterConstructionTask();
         }
     }
 
     /// <summary>
-    /// 유닛이 건설 작업 수행
+    /// 스스로 TaskManager에 등록
     /// </summary>
-    /// <param name="workAmount">작업량</param>
-    /// <returns>건설 완료 여부</returns>
+    private void RegisterConstructionTask()
+    {
+        if (TaskManager.Instance == null) return;
+
+        var taskData = new TaskData(TaskType.Construct, transform.position, gameObject)
+        {
+            Priority = TaskPriority.Normal,
+            MaxWorkers = Mathf.Clamp(data.Size.x * data.Size.y, 1, 3),
+            WorkRequired = data.ConstructionWorkRequired
+        };
+
+        constructionTask = TaskManager.Instance.PostTask(taskData, this);
+        Debug.Log($"[Building] {data.Name} 건설 작업 등록");
+    }
+
     public bool DoConstructionWork(float workAmount)
     {
-        if (data == null) return true;  // 데이터 없으면 완료 처리
-
-        if (currentState == BuildingState.Completed)
-            return true;
+        if (currentState == BuildingState.Completed) return true;
 
         if (currentState == BuildingState.Blueprint)
-        {
             SetState(BuildingState.UnderConstruction);
-            Debug.Log($"[Building] {data.Name} 건설 시작!");
-        }
 
         currentConstructionWork += workAmount;
-
-        // 디버그: 건설 진행 상황
-        Debug.Log($"[Building] {data.Name} 건설 중: {currentConstructionWork:F1}/{data.ConstructionWorkRequired} ({ConstructionProgress * 100:F0}%)");
-
         OnConstructionProgress?.Invoke(this, ConstructionProgress);
+
+        if (constructionTask != null)
+            constructionTask.CurrentProgress = ConstructionProgress;
+
+        Debug.Log($"[Building] {data.Name}: {ConstructionProgress * 100:F0}%");
 
         if (currentConstructionWork >= data.ConstructionWorkRequired)
         {
             CompleteConstruction();
             return true;
         }
-
         return false;
     }
 
     private void CompleteConstruction()
     {
-        if (data != null)
-        {
-            currentConstructionWork = data.ConstructionWorkRequired;
-            Debug.Log($"[Building] {data.Name} construction completed!");
-        }
-
+        currentConstructionWork = data?.ConstructionWorkRequired ?? 0;
         SetState(BuildingState.Completed);
         UpdateVisual();
+
+        if (constructionTask != null)
+        {
+            TaskManager.Instance?.CompleteTask(constructionTask);
+            constructionTask = null;
+        }
+
         OnConstructionComplete?.Invoke(this);
+        Debug.Log($"[Building] {data?.Name} 건설 완료!");
     }
 
-    private void SetState(BuildingState newState)
-    {
-        currentState = newState;
-    }
+    private void SetState(BuildingState newState) => currentState = newState;
 
     private void UpdateVisual()
     {
-        // 기존 비주얼 제거
-        if (currentVisual != null)
-        {
-            Destroy(currentVisual);
-        }
+        if (currentVisual != null) Destroy(currentVisual);
 
-        // 새 비주얼 생성
         GameObject prefab = currentState == BuildingState.Completed
-            ? data.Prefab
-            : (data.BlueprintPrefab ?? data.Prefab);  // Blueprint 없으면 일반 Prefab 사용
+            ? data.Prefab : (data.BlueprintPrefab ?? data.Prefab);
 
         if (prefab != null)
         {
@@ -133,12 +119,18 @@ public class Building : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 건물 철거
-    /// </summary>
     public void Demolish()
     {
-        // TODO: 자원 일부 환불?
+        if (constructionTask != null)
+            TaskManager.Instance?.CancelTask(constructionTask);
+
+        GridDataManager.Instance?.RemoveObject(GridPosition);
         Destroy(gameObject);
+    }
+
+    private void OnDestroy()
+    {
+        if (constructionTask != null)
+            TaskManager.Instance?.CancelTask(constructionTask);
     }
 }

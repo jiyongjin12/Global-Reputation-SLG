@@ -3,18 +3,12 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
-/// <summary>
-/// 유닛 타입
-/// </summary>
 public enum UnitType
 {
-    Worker,     // 일반 일꾼
-    Fighter     // 전투 유닛
+    Worker,
+    Fighter
 }
 
-/// <summary>
-/// 유닛 상태
-/// </summary>
 public enum UnitState
 {
     Idle,
@@ -26,48 +20,55 @@ public enum UnitState
 }
 
 /// <summary>
-/// 메인 유닛 클래스
+/// 유닛 (Body) - 물리적 데이터와 기능
 /// </summary>
 [RequireComponent(typeof(NavMeshAgent))]
 public class Unit : MonoBehaviour
 {
-    [Header("Unit Info")]
+    [Header("Basic Info")]
     [SerializeField] private string unitName;
     [SerializeField] private UnitType unitType = UnitType.Worker;
 
     [Header("Stats")]
-    [SerializeField] private UnitStats stats = new UnitStats();
-
-    [Header("Inventory")]
-    [SerializeField] private UnitInventory inventory = new UnitInventory();
+    [SerializeField] private float maxHP = 100f;
+    [SerializeField] private float currentHP = 100f;
+    [SerializeField] private float moveSpeed = 3f;
+    [SerializeField] private float workSpeed = 1f;
+    [SerializeField] private float gatherPower = 1f;
+    [SerializeField] private float attackPower = 10f;
 
     [Header("Traits")]
-    [SerializeField] private List<UnitTraitSO> traits = new List<UnitTraitSO>();
-
-    [Header("Settings")]
-    [SerializeField] private float hungerDecreaseRate = 0.05f; // 초당 배고픔 감소량 (분당 3 = 약 33분 후 0)
-    [SerializeField] private float loyaltyDecreaseRate = 0.1f; // 초당 충성심 감소량 (불만족 시)
+    [SerializeField] private List<UnitTraitSO> traits = new();
 
     // Components
     private NavMeshAgent agent;
-    private UnitAI unitAI;  // AI 컴포넌트 (선택적)
+    private UnitMovement movement;
+    private UnitInventory inventory;
 
-    // State
-    private UnitState currentState = UnitState.Idle;
-    private UnitTask currentTask;
-    private Queue<UnitTask> taskQueue = new Queue<UnitTask>();
+    // Blackboard
+    public UnitBlackboard Blackboard { get; private set; }
 
     // Properties
     public string UnitName => unitName;
     public UnitType Type => unitType;
-    public UnitStats Stats => stats;
+    public float MaxHP => maxHP;
+    public float CurrentHP => currentHP;
+    public float MoveSpeed => moveSpeed;
+    public float WorkSpeed => workSpeed;
+    public float GatherPower => gatherPower;
+    public float AttackPower => attackPower;
+    public bool IsAlive => currentHP > 0;
     public UnitInventory Inventory => inventory;
     public List<UnitTraitSO> Traits => traits;
-    public UnitState CurrentState => currentState;
-    public UnitTask CurrentTask => currentTask;
-    public bool IsIdle => currentState == UnitState.Idle && currentTask == null && taskQueue.Count == 0;
-    public bool HasTask => currentTask != null || taskQueue.Count > 0;
-    public bool HasAI => unitAI != null;
+    public NavMeshAgent Agent => agent;
+
+    // 호환성 Properties
+    public UnitStats Stats => _legacyStats;
+    private UnitStats _legacyStats;
+    public bool IsIdle => Blackboard?.IsIdle ?? true;
+    public bool HasTask => Blackboard?.CurrentTask != null;
+    public UnitState CurrentState => Blackboard?.CurrentState ?? UnitState.Idle;
+    public UnitTask CurrentTask => null; // 기존 호환용
 
     // 이벤트
     public event Action<Unit> OnUnitDeath;
@@ -77,7 +78,12 @@ public class Unit : MonoBehaviour
     private void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
-        unitAI = GetComponent<UnitAI>();  // AI 컴포넌트 가져오기 (없을 수도 있음)
+        movement = GetComponent<UnitMovement>();
+        inventory = new UnitInventory();
+        Blackboard = new UnitBlackboard();
+
+        // 호환성용 UnitStats 생성
+        _legacyStats = new UnitStats();
     }
 
     private void Start()
@@ -85,277 +91,160 @@ public class Unit : MonoBehaviour
         Initialize();
     }
 
-    /// <summary>
-    /// 유닛 초기화
-    /// </summary>
     public void Initialize(string name = null, List<UnitTraitSO> initialTraits = null)
     {
         if (!string.IsNullOrEmpty(name))
             unitName = name;
         else if (string.IsNullOrEmpty(unitName))
-            unitName = "Unit_" + UnityEngine.Random.Range(1000, 9999);
+            unitName = $"Unit_{UnityEngine.Random.Range(1000, 9999)}";
 
-        stats.Initialize();
-        inventory.Initialize(1, 10); // 1슬롯, 10스택
+        currentHP = maxHP;
+        inventory.Initialize(1, 10);
+        Blackboard.Reset();
 
-        // 특성 적용
+        _legacyStats.Initialize(maxHP);
+
         if (initialTraits != null)
-        {
             traits = initialTraits;
-        }
+
         ApplyTraits();
+        agent.speed = moveSpeed;
 
-        // 이벤트 연결
-        stats.OnDeath += HandleDeath;
-        stats.OnHungerCritical += HandleHungerCritical;
-        stats.OnLoyaltyCritical += HandleLoyaltyCritical;
-
-        // NavMeshAgent 설정
-        agent.speed = stats.MoveSpeed;
+        // Blackboard 이벤트 연결
+        Blackboard.OnStateChanged += (state) => OnStateChanged?.Invoke(this, state);
     }
 
-    private void Update()
-    {
-        // 스탯 갱신 (배고픔 감소 등)
-        UpdateStats();
+    // ==================== 이동 ====================
 
-        // 작업 실행
-        ProcessTask();
-
-        // 상태 업데이트
-        UpdateState();
-    }
-
-    private void UpdateStats()
-    {
-        // UnitAI가 없을 때만 여기서 배고픔 감소 처리
-        // (UnitAI가 있으면 AI에서 처리)
-        if (unitAI == null)
-        {
-            stats.DecreaseHunger(hungerDecreaseRate * Time.deltaTime);
-        }
-
-        // 불만족 상태면 충성심 감소
-        if (stats.IsHungry)
-        {
-            stats.ModifyLoyalty(-loyaltyDecreaseRate * Time.deltaTime);
-        }
-    }
-
-    private void ProcessTask()
-    {
-        // 현재 작업이 없으면 큐에서 가져오기
-        if (currentTask == null && taskQueue.Count > 0)
-        {
-            currentTask = taskQueue.Dequeue();
-            Debug.Log($"[Unit] {unitName}: 새 작업 시작 - {currentTask.Type} (남은 큐: {taskQueue.Count})");
-            currentTask.Start(this);
-        }
-
-        // 현재 작업 실행
-        if (currentTask != null)
-        {
-            if (currentTask.IsComplete(this))
-            {
-                Debug.Log($"[Unit] {unitName}: 작업 완료 - {currentTask.Type}");
-                UnitTask completedTask = currentTask;
-                currentTask.Complete(this);
-                OnTaskCompleted?.Invoke(this, completedTask);
-
-                // UnitAI에게 알림
-                unitAI?.OnTaskCompleted(completedTask);
-
-                currentTask = null;
-            }
-            else
-            {
-                currentTask.Execute(this);
-            }
-        }
-    }
-
-    private void UpdateState()
-    {
-        UnitState newState = UnitState.Idle;
-
-        if (currentTask != null)
-        {
-            switch (currentTask.Type)
-            {
-                case TaskType.MoveTo:
-                    newState = UnitState.Moving;
-                    break;
-                case TaskType.Construct:
-                case TaskType.Harvest:
-                case TaskType.PickupItem:
-                case TaskType.DeliverToStorage:
-                    newState = agent.velocity.magnitude > 0.1f ? UnitState.Moving : UnitState.Working;
-                    break;
-                case TaskType.Eat:
-                    newState = UnitState.Eating;
-                    break;
-                case TaskType.Attack:
-                    newState = UnitState.Fighting;
-                    break;
-                case TaskType.Flee:
-                    newState = UnitState.Fleeing;
-                    break;
-            }
-        }
-
-        if (newState != currentState)
-        {
-            currentState = newState;
-            OnStateChanged?.Invoke(this, currentState);
-        }
-    }
-
-    /// <summary>
-    /// 작업 할당
-    /// </summary>
-    public void AssignTask(UnitTask task)
-    {
-        taskQueue.Enqueue(task);
-    }
-
-    /// <summary>
-    /// 작업 즉시 할당 (현재 작업 취소)
-    /// </summary>
-    public void AssignTaskImmediate(UnitTask task)
-    {
-        currentTask?.Cancel();
-        currentTask = task;
-        currentTask.Start(this);
-    }
-
-    /// <summary>
-    /// 목표 위치로 이동
-    /// </summary>
     public void MoveTo(Vector3 destination)
     {
-        agent.SetDestination(destination);
+        Blackboard.TargetPosition = destination;
+
+        if (movement != null)
+            movement.MoveTo(destination, MovementStyle.Natural);
+        else
+            agent.SetDestination(destination);
     }
 
-    /// <summary>
-    /// 이동 정지
-    /// </summary>
     public void StopMoving()
     {
-        agent.ResetPath();
+        Blackboard.TargetPosition = null;
+
+        if (movement != null)
+            movement.Stop();
+        else
+            agent.ResetPath();
     }
 
-    /// <summary>
-    /// NavMeshAgent 기준 목적지 도착 여부
-    /// </summary>
     public bool HasArrivedAtDestination()
     {
-        // 경로 계산 중이면 아직 도착 아님
-        if (agent.pathPending)
-            return false;
-
-        // 남은 거리가 정지 거리보다 작으면 도착
+        if (agent.pathPending) return false;
         if (agent.remainingDistance <= agent.stoppingDistance)
         {
-            // 경로가 없거나 속도가 거의 0이면 도착
             if (!agent.hasPath || agent.velocity.sqrMagnitude < 0.1f)
-            {
                 return true;
-            }
         }
-
         return false;
     }
 
-    /// <summary>
-    /// NavMeshAgent 접근용
-    /// </summary>
-    public UnityEngine.AI.NavMeshAgent Agent => agent;
+    // ==================== 체력 ====================
 
-    /// <summary>
-    /// 특성 효과 적용
-    /// </summary>
+    public void TakeDamage(float damage)
+    {
+        float oldHP = currentHP;
+        currentHP = Mathf.Max(0, currentHP - damage);
+        _legacyStats.TakeDamage(damage);
+
+        if (currentHP <= 0 && oldHP > 0)
+            Die();
+    }
+
+    public void Heal(float amount)
+    {
+        currentHP = Mathf.Min(maxHP, currentHP + amount);
+        _legacyStats.Heal(amount);
+    }
+
+    public void Eat(float nutritionValue)
+    {
+        Blackboard.Eat(nutritionValue);
+        _legacyStats.Eat(nutritionValue);
+    }
+
+    private void Die()
+    {
+        Blackboard.IsAlive = false;
+        inventory.DropAllItems();
+        OnUnitDeath?.Invoke(this);
+        Destroy(gameObject);
+    }
+
+    // ==================== 작업 ====================
+
+    public float DoWork()
+    {
+        Blackboard.LastWorkedTime = Time.time;
+        return workSpeed * GetTraitMultiplier(UnitStatType.WorkSpeed);
+    }
+
+    public float DoGather(ResourceNodeType? nodeType = null)
+    {
+        return gatherPower * GetTraitMultiplier(UnitStatType.GatherPower, nodeType);
+    }
+
+    // ==================== 호환성 메서드 ====================
+
+    public void AssignTask(UnitTask task) { }
+    public void AssignTaskImmediate(UnitTask task) { }
+
+    // ==================== 특성 ====================
+
     private void ApplyTraits()
     {
         foreach (var trait in traits)
         {
             foreach (var effect in trait.Effects)
             {
-                // 조건부 효과는 나중에 작업 시 확인
                 if (!effect.HasNodeTypeCondition)
-                {
-                    stats.ApplyBuff(effect.AffectedStat, effect.Multiplier);
-                }
+                    ApplyStatModifier(effect.AffectedStat, effect.Multiplier);
             }
         }
-
-        // 이동 속도 업데이트
-        agent.speed = stats.MoveSpeed;
+        agent.speed = moveSpeed;
     }
 
-    /// <summary>
-    /// 특정 자원 타입에 대한 특성 배율 가져오기
-    /// </summary>
+    private void ApplyStatModifier(UnitStatType stat, float multiplier)
+    {
+        switch (stat)
+        {
+            case UnitStatType.MoveSpeed:
+                moveSpeed *= multiplier;
+                break;
+            case UnitStatType.WorkSpeed:
+                workSpeed *= multiplier;
+                break;
+            case UnitStatType.GatherPower:
+                gatherPower *= multiplier;
+                break;
+            case UnitStatType.AttackPower:
+                attackPower *= multiplier;
+                break;
+        }
+    }
+
     public float GetTraitMultiplier(UnitStatType statType, ResourceNodeType? nodeType = null)
     {
         float multiplier = 1f;
-
         foreach (var trait in traits)
         {
             foreach (var effect in trait.Effects)
             {
                 if (effect.AffectedStat == statType)
                 {
-                    // 조건부 효과 체크
                     if (!effect.HasNodeTypeCondition || effect.TargetNodeType == nodeType)
-                    {
                         multiplier *= effect.Multiplier;
-                    }
                 }
             }
         }
-
         return multiplier;
-    }
-
-    /// <summary>
-    /// 음식 먹기
-    /// </summary>
-    public void Eat(float nutritionValue)
-    {
-        stats.Eat(nutritionValue);
-    }
-
-    private void HandleDeath()
-    {
-        Debug.Log($"[Unit] {unitName} has died!");
-
-        // 인벤토리 아이템 드롭
-        var droppedItems = inventory.DropAllItems();
-        foreach (var (resource, amount) in droppedItems)
-        {
-            // TODO: 실제로 바닥에 드롭
-        }
-
-        OnUnitDeath?.Invoke(this);
-        Destroy(gameObject);
-    }
-
-    private void HandleHungerCritical()
-    {
-        Debug.Log($"[Unit] {unitName} is hungry!");
-        // TODO: 음식 찾기 우선순위 높이기
-    }
-
-    private void HandleLoyaltyCritical()
-    {
-        Debug.Log($"[Unit] {unitName}'s loyalty is critical!");
-        // TODO: 반란 가능성, 도망 등
-    }
-
-    private void OnDestroy()
-    {
-        stats.OnDeath -= HandleDeath;
-        stats.OnHungerCritical -= HandleHungerCritical;
-        stats.OnLoyaltyCritical -= HandleLoyaltyCritical;
     }
 }

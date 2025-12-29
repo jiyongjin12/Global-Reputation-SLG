@@ -836,48 +836,45 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   grid: {fileID: 221516403}
-  mapSize: {x: 50, y: 50}
-  mapOffset: {x: -25, y: -25}
-  clearZoneCenter: {x: 0, y: 0}
-  clearZoneRadius: 5
+  gridLineSet: {fileID: 894807442}
+  nodeDatabase: {fileID: 11400000, guid: 5180373170c852a4a9f92c7a4c49f8df, type: 2}
+  clearZoneCellX: 10
+  clearZoneCellZ: 10
+  clearZoneRadius: 3
   spawnSettings:
-  - NodeData:
-      <Name>k__BackingField: 
-      <ID>k__BackingField: 0
-      <NodeType>k__BackingField: 0
-      <Prefab>k__BackingField: {fileID: 0}
-      <Size>k__BackingField: {x: 0, y: 0}
-      <MaxHP>k__BackingField: 0
-      <HarvestWorkPerHit>k__BackingField: 0
-      <Drops>k__BackingField: []
-      <CanRespawn>k__BackingField: 0
-      <RespawnTime>k__BackingField: 0
-    SpawnChance: 0.1
+  - Name: Resource
+    NodeID: 0
+    Enabled: 1
     MinCount: 20
     MaxCount: 40
-    UseClustering: 1
+    Distribution: 1
+    MinDistance: 3
     ClusterCount: 5
     NodesPerCluster: 8
     ClusterRadius: 4
-  - NodeData:
-      <Name>k__BackingField: 
-      <ID>k__BackingField: 0
-      <NodeType>k__BackingField: 0
-      <Prefab>k__BackingField: {fileID: 0}
-      <Size>k__BackingField: {x: 0, y: 0}
-      <MaxHP>k__BackingField: 0
-      <HarvestWorkPerHit>k__BackingField: 0
-      <Drops>k__BackingField: []
-      <CanRespawn>k__BackingField: 0
-      <RespawnTime>k__BackingField: 0
-    SpawnChance: 0.05
+    ClusterMinDistance: 1.5
+    EdgePadding: 2
+    ScaleVariation: 0.2
+    RandomRotation: 1
+  - Name: Resource
+    NodeID: 1
+    Enabled: 1
     MinCount: 10
     MaxCount: 20
-    UseClustering: 0
+    Distribution: 1
+    MinDistance: 3
     ClusterCount: 0
     NodesPerCluster: 0
     ClusterRadius: 0
-  nodeDatabase: {fileID: 11400000, guid: 5180373170c852a4a9f92c7a4c49f8df, type: 2}
+    ClusterMinDistance: 1.5
+    EdgePadding: 2
+    ScaleVariation: 0.2
+    RandomRotation: 1
+  generateOnStart: 1
+  useRandomSeed: 1
+  randomSeed: 0
+  showDebugGizmos: 1
+  logGeneration: 1
 --- !u!1 &712106058
 GameObject:
   m_ObjectHideFlags: 0
@@ -1633,7 +1630,7 @@ GameObject:
   - component: {fileID: 1207553507}
   - component: {fileID: 1207553508}
   m_Layer: 0
-  m_Name: Test
+  m_Name: PlaySet
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1647,12 +1644,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1207553506}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1862973937}
+  m_Father: {fileID: 1872160706}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1207553508
 MonoBehaviour:
@@ -2131,10 +2128,53 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7fd3bda627a8ff44c90109ab25c434f2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  storageBuilding: {fileID: 0}
-  taskAssignInterval: 0.5
-  maxWorkersPerBuilding: 3
-  assignToAIUnits: 1
+  showDebugLogs: 1
+--- !u!1 &1847608542
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1847608543}
+  - component: {fileID: 1847608544}
+  m_Layer: 0
+  m_Name: GridDataManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1847608543
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1847608542}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1862973937}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1847608544
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1847608542}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d2c7db91965aab14fa3a075d5a561df1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  grid: {fileID: 221516403}
+  gridLineSet: {fileID: 894807442}
 --- !u!1 &1862973936
 GameObject:
   m_ObjectHideFlags: 0
@@ -2168,9 +2208,147 @@ Transform:
   - {fileID: 1761360646}
   - {fileID: 1080073316}
   - {fileID: 676129581}
-  - {fileID: 1207553507}
+  - {fileID: 1847608543}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1872160705
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1872160706}
+  m_Layer: 0
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1872160706
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1872160705}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 2083621454}
+  - {fileID: 1207553507}
+  - {fileID: 1974659110}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1974659109
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1974659110}
+  - component: {fileID: 1974659111}
+  m_Layer: 0
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &1974659110
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1974659109}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1872160706}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1974659111
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1974659109}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c399726f1dd63f947adc727166d42962, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  grid: {fileID: 221516403}
+  gridLineSet: {fileID: 894807442}
+  testPrefab: {fileID: 6514400516380827500, guid: 35477bd42202d974a875ca0966cea195, type: 3}
+  testCellX: 5
+  testCellZ: 5
+  createDebugSpheres: 1
+--- !u!1 &2083621453
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2083621454}
+  - component: {fileID: 2083621455}
+  m_Layer: 0
+  m_Name: Test
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2083621454
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2083621453}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1872160706}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2083621455
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2083621453}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 43d73986c862c6d44a12061dfeaa7d3c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  grid: {fileID: 221516403}
+  gridLineSet: {fileID: 894807442}
+  showGizmoSpheres: 1
+  sphereRadius: 0.1
+  cornerColor: {r: 1, g: 0, b: 0, a: 1}
+  centerColor: {r: 0, g: 1, b: 0, a: 1}
+  actualGridSize: {x: 0, y: 0}
+  actualCellSize: {x: 0, y: 0}
+  cellCountX: 0
+  cellCountZ: 0
 --- !u!1001 &1214139041751436510
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -2331,3 +2509,4 @@ SceneRoots:
   - {fileID: 860859860}
   - {fileID: 1214139041751436510}
   - {fileID: 1862973937}
+  - {fileID: 1872160706}

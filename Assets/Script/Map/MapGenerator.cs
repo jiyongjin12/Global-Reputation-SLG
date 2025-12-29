@@ -1,26 +1,19 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// 자원 스폰 분포 타입
-/// </summary>
 public enum SpawnDistribution
 {
-    Random,             // 완전 랜덤
-    PoissonDisc,        // 포아송 디스크 (균일한 분포)
-    Clustered,          // 클러스터 (군집)
-    ClusteredPoisson    // 클러스터 + 포아송 (클러스터 내에서 균일)
+    Random,
+    PoissonDisc,
+    Clustered,
+    ClusteredPoisson
 }
 
-/// <summary>
-/// 자연환경 스폰 설정
-/// </summary>
 [System.Serializable]
 public class ResourceSpawnSettings
 {
     [Header("Basic")]
     public string Name = "Resource";
-    [Tooltip("ResourceNodeDatabaseSO에서 사용할 노드 ID")]
     public int NodeID;
     public bool Enabled = true;
 
@@ -32,7 +25,6 @@ public class ResourceSpawnSettings
     public SpawnDistribution Distribution = SpawnDistribution.PoissonDisc;
 
     [Header("Poisson Disc Settings")]
-    [Tooltip("최소 간격 (이 거리 안에 다른 노드가 없음)")]
     public float MinDistance = 3f;
 
     [Header("Cluster Settings")]
@@ -50,21 +42,19 @@ public class ResourceSpawnSettings
 }
 
 /// <summary>
-/// 맵 생성기 - 포아송 디스크 샘플링 기반
+/// 맵 생성기 - GridCellVisualizer와 동일한 좌표 계산
 /// </summary>
 public class MapGenerator : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private Grid grid;
+    [SerializeField] private GridLineSet gridLineSet;
     [SerializeField] private ResourceNodeDatabaseSO nodeDatabase;
 
-    [Header("Map Settings")]
-    [SerializeField] private Vector2Int mapSize = new Vector2Int(50, 50);
-    [SerializeField] private Vector2Int mapOffset = new Vector2Int(-25, -25);
-
-    [Header("Clear Zone (시작 지점)")]
-    [SerializeField] private Vector2Int clearZoneCenter = Vector2Int.zero;
-    [SerializeField] private int clearZoneRadius = 5;
+    [Header("Clear Zone (셀 인덱스 기준)")]
+    [SerializeField] private int clearZoneCellX = 10;
+    [SerializeField] private int clearZoneCellZ = 10;
+    [SerializeField] private int clearZoneRadius = 3;
 
     [Header("Spawn Settings")]
     [SerializeField] private List<ResourceSpawnSettings> spawnSettings = new List<ResourceSpawnSettings>();
@@ -78,13 +68,20 @@ public class MapGenerator : MonoBehaviour
     [SerializeField] private bool showDebugGizmos = true;
     [SerializeField] private bool logGeneration = true;
 
+    // ★ 캐시 (GridCellVisualizer와 동일한 변수명)
+    private Vector3 gridOrigin;      // ★ Grid의 월드 위치
+    private Vector2 gridTotalSize;
+    private Vector2 cellSize;
+    private float offsetX;
+    private float offsetZ;
+    private int gridCellCountX;
+    private int gridCellCountZ;
+
     // 데이터
     private GridData environmentGridData;
     private List<ResourceNode> spawnedNodes = new List<ResourceNode>();
     private Transform nodesContainer;
 
-    // Properties
-    public GridData EnvironmentGridData => environmentGridData;
     public List<ResourceNode> SpawnedNodes => spawnedNodes;
 
     private void Awake()
@@ -96,26 +93,103 @@ public class MapGenerator : MonoBehaviour
 
     private void Start()
     {
+        CacheGridSettings();
+
         if (generateOnStart)
         {
             GenerateMap();
         }
     }
 
-    // ==================== 메인 생성 ====================
+    /// <summary>
+    /// ★ GridCellVisualizer와 동일하게 설정 캐시
+    /// </summary>
+    private void CacheGridSettings()
+    {
+        // ★★★ Grid의 월드 위치 저장 ★★★
+        if (grid != null)
+        {
+            gridOrigin = grid.transform.position;
+        }
+        else
+        {
+            gridOrigin = Vector3.zero;
+            Debug.LogWarning("[MapGenerator] Grid가 설정되지 않았습니다!");
+        }
+
+        // GridLineSet에서 크기 정보
+        if (gridLineSet != null)
+        {
+            gridTotalSize = gridLineSet.gridTotalSize;
+            cellSize = gridLineSet.cellSize;
+        }
+        else
+        {
+            gridTotalSize = new Vector2(20f, 20f);
+            cellSize = new Vector2(1f, 1f);
+            Debug.LogWarning("[MapGenerator] GridLineSet이 설정되지 않았습니다!");
+        }
+
+        // 셀 개수
+        gridCellCountX = Mathf.RoundToInt(gridTotalSize.x / cellSize.x);
+        gridCellCountZ = Mathf.RoundToInt(gridTotalSize.y / cellSize.y);
+
+        // 오프셋 (그리드 중앙 정렬)
+        offsetX = -gridTotalSize.x / 2f;
+        offsetZ = -gridTotalSize.y / 2f;
+
+        Debug.Log($"[MapGenerator] === 설정 캐시 완료 ===");
+        Debug.Log($"  gridOrigin: {gridOrigin}");
+        Debug.Log($"  gridTotalSize: {gridTotalSize}");
+        Debug.Log($"  cellSize: {cellSize}");
+        Debug.Log($"  cellCount: {gridCellCountX} x {gridCellCountZ}");
+        Debug.Log($"  offset: ({offsetX}, {offsetZ})");
+    }
+
+    // ==================== ★★★ 좌표 계산 (GridCellVisualizer와 100% 동일) ★★★ ====================
+
+    /// <summary>
+    /// ★ 셀 코너 좌표 (GridCellVisualizer와 동일)
+    /// </summary>
+    private Vector3 GetCellCornerPosition(int cellX, int cellZ)
+    {
+        return new Vector3(
+            gridOrigin.x + offsetX + (cellX * cellSize.x),
+            gridOrigin.y,
+            gridOrigin.z + offsetZ + (cellZ * cellSize.y)
+        );
+    }
+
+    /// <summary>
+    /// ★ 셀 중앙 좌표 (GridCellVisualizer와 동일)
+    /// </summary>
+    private Vector3 GetCellCenterPosition(int cellX, int cellZ)
+    {
+        Vector3 corner = GetCellCornerPosition(cellX, cellZ);
+        return corner + new Vector3(cellSize.x * 0.5f, 0, cellSize.y * 0.5f);
+    }
+
+    // ==================== 생성 로직 ====================
 
     [ContextMenu("Generate Map")]
     public void GenerateMap()
     {
         if (nodeDatabase == null)
         {
-            Debug.LogError("[MapGenerator] ResourceNodeDatabaseSO가 설정되지 않았습니다!");
+            Debug.LogError("[MapGenerator] ResourceNodeDatabaseSO가 없습니다!");
             return;
         }
 
-        // 시드 설정
-        Random.InitState(useRandomSeed ? System.Environment.TickCount : randomSeed);
+        if (spawnSettings.Count == 0)
+        {
+            Debug.LogError("[MapGenerator] Spawn Settings가 비어있습니다!");
+            return;
+        }
 
+        // 설정 다시 캐시 (에디터에서 변경됐을 수 있음)
+        CacheGridSettings();
+
+        Random.InitState(useRandomSeed ? System.Environment.TickCount : randomSeed);
         ClearMap();
 
         int totalSpawned = 0;
@@ -124,52 +198,41 @@ public class MapGenerator : MonoBehaviour
         {
             if (!settings.Enabled) continue;
 
-            // 데이터베이스에서 노드 데이터 가져오기
             ResourceNodeData nodeData = nodeDatabase.GetNodeByID(settings.NodeID);
             if (nodeData == null)
             {
-                Debug.LogWarning($"[MapGenerator] ID {settings.NodeID}에 해당하는 노드를 찾을 수 없습니다: {settings.Name}");
+                Debug.LogWarning($"[MapGenerator] NodeID {settings.NodeID} 없음: {settings.Name}");
                 continue;
             }
 
             if (nodeData.Prefab == null)
             {
-                Debug.LogWarning($"[MapGenerator] {nodeData.Name}의 Prefab이 없습니다!");
+                Debug.LogWarning($"[MapGenerator] {nodeData.Name} Prefab 없음!");
                 continue;
             }
 
             int spawnedCount = SpawnNodes(settings, nodeData);
+            totalSpawned += spawnedCount;
 
             if (logGeneration)
-            {
-                Debug.Log($"[MapGenerator] {settings.Name}: {spawnedCount}개 생성 ({settings.Distribution})");
-            }
-
-            totalSpawned += spawnedCount;
+                Debug.Log($"[MapGenerator] {settings.Name}: {spawnedCount}개 생성");
         }
 
         if (logGeneration)
-        {
-            Debug.Log($"[MapGenerator] 총 {totalSpawned}개 자원 노드 생성 완료");
-        }
+            Debug.Log($"[MapGenerator] 총 {totalSpawned}개 생성 완료");
     }
 
-    /// <summary>
-    /// 분포 타입에 따라 노드 생성
-    /// </summary>
     private int SpawnNodes(ResourceSpawnSettings settings, ResourceNodeData nodeData)
     {
-        List<Vector2> points = GeneratePoints(settings);
+        List<Vector2Int> cellPositions = GenerateCellPositions(settings);
         int targetCount = Random.Range(settings.MinCount, settings.MaxCount + 1);
         int spawnedCount = 0;
 
-        foreach (var point in points)
+        foreach (var cellPos in cellPositions)
         {
             if (spawnedCount >= targetCount) break;
 
-            Vector3Int gridPos = LocalToGridPosition(point);
-
-            if (TrySpawnNode(nodeData, gridPos, settings))
+            if (TrySpawnNodeAtCell(nodeData, cellPos.x, cellPos.y, settings))
             {
                 spawnedCount++;
             }
@@ -178,137 +241,168 @@ public class MapGenerator : MonoBehaviour
         return spawnedCount;
     }
 
-    // ==================== 포인트 생성 ====================
-
     /// <summary>
-    /// 분포 타입에 따라 포인트 생성
+    /// ★ 노드 스폰 (셀 중앙에 정확히!)
     /// </summary>
-    private List<Vector2> GeneratePoints(ResourceSpawnSettings settings)
+    private bool TrySpawnNodeAtCell(ResourceNodeData nodeData, int cellX, int cellZ, ResourceSpawnSettings settings)
     {
-        int targetCount = settings.MaxCount * 2; // 여유있게 생성
+        if (IsCellInClearZone(cellX, cellZ))
+            return false;
 
+        if (!IsCellInBounds(cellX, cellZ))
+            return false;
+
+        Vector3Int gridPos = CellIndexToGridPosition(cellX, cellZ);
+
+        // 배치 가능 체크
+        if (GridDataManager.Instance != null)
+        {
+            if (!GridDataManager.Instance.CanPlaceAtCell(cellX, cellZ, nodeData.Size))
+                return false;
+        }
+        else
+        {
+            if (!environmentGridData.CanPlaceObejctAt(gridPos, nodeData.Size))
+                return false;
+        }
+
+        // ★★★ 셀 중앙 좌표 (GridCellVisualizer와 동일한 계산!) ★★★
+        Vector3 worldPos = GetCellCenterPosition(cellX, cellZ);
+
+        if (logGeneration)
+        {
+            Debug.Log($"[MapGenerator] 스폰: Cell({cellX},{cellZ}) → World{worldPos}");
+        }
+
+        // 스폰
+        GameObject nodeObj = Instantiate(nodeData.Prefab, worldPos, Quaternion.identity);
+        nodeObj.transform.SetParent(nodesContainer);
+        nodeObj.name = $"{nodeData.Name}_{spawnedNodes.Count}";
+
+        // 스케일
+        if (settings.ScaleVariation > 0)
+        {
+            float scale = 1f + Random.Range(-settings.ScaleVariation, settings.ScaleVariation);
+            nodeObj.transform.localScale *= scale;
+        }
+
+        // 회전
+        if (settings.RandomRotation)
+        {
+            nodeObj.transform.rotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
+        }
+
+        // ResourceNode 컴포넌트
+        ResourceNode node = nodeObj.GetComponent<ResourceNode>();
+        if (node == null)
+            node = nodeObj.AddComponent<ResourceNode>();
+
+        node.Initialize(nodeData, gridPos);
+
+        // GridData 등록
+        if (GridDataManager.Instance != null)
+        {
+            GridDataManager.Instance.PlaceObjectAtCell(cellX, cellZ, nodeData.Size, nodeData.ID, PlacedObjectType.ResourceNode, nodeObj);
+        }
+        else
+        {
+            environmentGridData.AddObjectAt(gridPos, nodeData.Size, nodeData.ID, spawnedNodes.Count);
+        }
+
+        spawnedNodes.Add(node);
+        node.OnDepleted += HandleNodeDepleted;
+
+        return true;
+    }
+
+    // ==================== 셀 위치 생성 ====================
+
+    private List<Vector2Int> GenerateCellPositions(ResourceSpawnSettings settings)
+    {
         switch (settings.Distribution)
         {
             case SpawnDistribution.Random:
-                return GenerateRandomPoints(targetCount, settings.EdgePadding);
-
+                return GenerateRandomCellPositions(settings);
             case SpawnDistribution.PoissonDisc:
-                return GeneratePoissonPoints(targetCount, settings.MinDistance, settings.EdgePadding);
-
+                return GeneratePoissonCellPositions(settings);
             case SpawnDistribution.Clustered:
-                return GenerateClusteredPoints(settings);
-
             case SpawnDistribution.ClusteredPoisson:
-                return GenerateClusteredPoissonPoints(settings);
-
+                return GenerateClusteredCellPositions(settings);
             default:
-                return new List<Vector2>();
+                return new List<Vector2Int>();
         }
     }
 
-    /// <summary>
-    /// 완전 랜덤 포인트
-    /// </summary>
-    private List<Vector2> GenerateRandomPoints(int count, int padding)
+    private List<Vector2Int> GenerateRandomCellPositions(ResourceSpawnSettings settings)
     {
-        List<Vector2> points = new List<Vector2>();
+        List<Vector2Int> positions = new List<Vector2Int>();
+        HashSet<Vector2Int> used = new HashSet<Vector2Int>();
+        int padding = settings.EdgePadding;
 
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < settings.MaxCount * 3; i++)
         {
-            points.Add(new Vector2(
-                Random.Range(padding, mapSize.x - padding),
-                Random.Range(padding, mapSize.y - padding)
-            ));
+            int x = Random.Range(padding, gridCellCountX - padding);
+            int z = Random.Range(padding, gridCellCountZ - padding);
+            Vector2Int pos = new Vector2Int(x, z);
+
+            if (!used.Contains(pos) && !IsCellInClearZone(x, z))
+            {
+                positions.Add(pos);
+                used.Add(pos);
+            }
         }
 
-        return points;
+        return positions;
     }
 
-    /// <summary>
-    /// 포아송 디스크 샘플링 (Bridson's Algorithm)
-    /// </summary>
-    private List<Vector2> GeneratePoissonPoints(int maxCount, float minDist, int padding)
+    private List<Vector2Int> GeneratePoissonCellPositions(ResourceSpawnSettings settings)
     {
-        float cellSize = minDist / Mathf.Sqrt(2);
-        int gridWidth = Mathf.CeilToInt(mapSize.x / cellSize);
-        int gridHeight = Mathf.CeilToInt(mapSize.y / cellSize);
-
-        int[,] sampleGrid = new int[gridWidth, gridHeight];
-        for (int x = 0; x < gridWidth; x++)
-            for (int y = 0; y < gridHeight; y++)
-                sampleGrid[x, y] = -1;
-
-        List<Vector2> points = new List<Vector2>();
-        List<Vector2> activeList = new List<Vector2>();
+        List<Vector2Int> positions = new List<Vector2Int>();
+        HashSet<Vector2Int> used = new HashSet<Vector2Int>();
+        int padding = settings.EdgePadding;
+        int minDist = Mathf.Max(1, Mathf.CeilToInt(settings.MinDistance));
 
         // 첫 포인트
-        Vector2 firstPoint = new Vector2(
-            Random.Range(padding, mapSize.x - padding),
-            Random.Range(padding, mapSize.y - padding)
-        );
-
-        AddPoissonPoint(firstPoint, points, activeList, sampleGrid, cellSize, gridWidth, gridHeight);
-
-        int k = 30; // 시도 횟수
-
-        while (activeList.Count > 0 && points.Count < maxCount)
+        for (int attempt = 0; attempt < 100 && positions.Count == 0; attempt++)
         {
-            int randomIndex = Random.Range(0, activeList.Count);
-            Vector2 point = activeList[randomIndex];
-            bool found = false;
-
-            for (int i = 0; i < k; i++)
+            int x = Random.Range(padding, gridCellCountX - padding);
+            int z = Random.Range(padding, gridCellCountZ - padding);
+            if (!IsCellInClearZone(x, z))
             {
-                Vector2 newPoint = GetRandomPointAround(point, minDist);
-
-                if (!IsInBounds(newPoint, padding)) continue;
-                if (HasNeighbor(newPoint, points, sampleGrid, cellSize, minDist, gridWidth, gridHeight)) continue;
-
-                AddPoissonPoint(newPoint, points, activeList, sampleGrid, cellSize, gridWidth, gridHeight);
-                found = true;
-                break;
-            }
-
-            if (!found)
-            {
-                activeList.RemoveAt(randomIndex);
+                positions.Add(new Vector2Int(x, z));
+                used.Add(new Vector2Int(x, z));
             }
         }
 
-        return points;
-    }
+        if (positions.Count == 0) return positions;
 
-    /// <summary>
-    /// 원 안에서 포아송 포인트 생성
-    /// </summary>
-    private List<Vector2> GeneratePoissonPointsInCircle(Vector2 center, float radius, float minDist, int maxCount)
-    {
-        List<Vector2> points = new List<Vector2>();
-        List<Vector2> activeList = new List<Vector2>();
+        List<int> active = new List<int> { 0 };
 
-        points.Add(center);
-        activeList.Add(center);
-
-        int k = 30;
-
-        while (activeList.Count > 0 && points.Count < maxCount)
+        while (active.Count > 0 && positions.Count < settings.MaxCount * 2)
         {
-            int randomIndex = Random.Range(0, activeList.Count);
-            Vector2 point = activeList[randomIndex];
+            int idx = Random.Range(0, active.Count);
+            Vector2Int basePos = positions[active[idx]];
             bool found = false;
 
-            for (int i = 0; i < k; i++)
+            for (int i = 0; i < 30; i++)
             {
-                Vector2 newPoint = GetRandomPointAround(point, minDist);
+                float angle = Random.value * Mathf.PI * 2f;
+                int dist = Random.Range(minDist, minDist * 2 + 1);
+                int newX = basePos.x + Mathf.RoundToInt(Mathf.Cos(angle) * dist);
+                int newZ = basePos.y + Mathf.RoundToInt(Mathf.Sin(angle) * dist);
+                Vector2Int newPos = new Vector2Int(newX, newZ);
 
-                // 원 안에 있는지 체크
-                if (Vector2.Distance(newPoint, center) > radius) continue;
+                if (newX < padding || newX >= gridCellCountX - padding ||
+                    newZ < padding || newZ >= gridCellCountZ - padding)
+                    continue;
 
-                // 기존 포인트와 거리 체크
+                if (used.Contains(newPos) || IsCellInClearZone(newX, newZ))
+                    continue;
+
                 bool tooClose = false;
-                foreach (var p in points)
+                foreach (var p in positions)
                 {
-                    if (Vector2.Distance(p, newPoint) < minDist)
+                    if (Vector2Int.Distance(p, newPos) < minDist)
                     {
                         tooClose = true;
                         break;
@@ -317,239 +411,78 @@ public class MapGenerator : MonoBehaviour
 
                 if (!tooClose)
                 {
-                    points.Add(newPoint);
-                    activeList.Add(newPoint);
+                    positions.Add(newPos);
+                    used.Add(newPos);
+                    active.Add(positions.Count - 1);
                     found = true;
                     break;
                 }
             }
 
-            if (!found)
-            {
-                activeList.RemoveAt(randomIndex);
-            }
+            if (!found) active.RemoveAt(idx);
         }
 
-        return points;
+        return positions;
     }
 
-    /// <summary>
-    /// 클러스터 포인트
-    /// </summary>
-    private List<Vector2> GenerateClusteredPoints(ResourceSpawnSettings settings)
+    private List<Vector2Int> GenerateClusteredCellPositions(ResourceSpawnSettings settings)
     {
-        List<Vector2> points = new List<Vector2>();
+        List<Vector2Int> positions = new List<Vector2Int>();
+        HashSet<Vector2Int> used = new HashSet<Vector2Int>();
+        int padding = settings.EdgePadding;
+        int clusterRadius = Mathf.Max(1, Mathf.CeilToInt(settings.ClusterRadius));
 
         for (int c = 0; c < settings.ClusterCount; c++)
         {
-            Vector2 clusterCenter = GetRandomClusterCenter(settings);
+            int centerX = Random.Range(padding + clusterRadius, gridCellCountX - padding - clusterRadius);
+            int centerZ = Random.Range(padding + clusterRadius, gridCellCountZ - padding - clusterRadius);
 
-            for (int i = 0; i < settings.NodesPerCluster; i++)
+            for (int attempt = 0; IsCellInClearZone(centerX, centerZ) && attempt < 50; attempt++)
             {
-                float angle = Random.Range(0f, Mathf.PI * 2);
-                float distance = Random.Range(0f, settings.ClusterRadius);
-
-                Vector2 point = clusterCenter + new Vector2(
-                    Mathf.Cos(angle) * distance,
-                    Mathf.Sin(angle) * distance
-                );
-
-                points.Add(point);
+                centerX = Random.Range(padding + clusterRadius, gridCellCountX - padding - clusterRadius);
+                centerZ = Random.Range(padding + clusterRadius, gridCellCountZ - padding - clusterRadius);
             }
-        }
 
-        return points;
-    }
-
-    /// <summary>
-    /// 클러스터 + 포아송 포인트
-    /// </summary>
-    private List<Vector2> GenerateClusteredPoissonPoints(ResourceSpawnSettings settings)
-    {
-        List<Vector2> points = new List<Vector2>();
-
-        for (int c = 0; c < settings.ClusterCount; c++)
-        {
-            Vector2 clusterCenter = GetRandomClusterCenter(settings);
-
-            List<Vector2> clusterPoints = GeneratePoissonPointsInCircle(
-                clusterCenter,
-                settings.ClusterRadius,
-                settings.ClusterMinDistance,
-                settings.NodesPerCluster
-            );
-
-            points.AddRange(clusterPoints);
-        }
-
-        return points;
-    }
-
-    // ==================== 포아송 헬퍼 ====================
-
-    private void AddPoissonPoint(Vector2 point, List<Vector2> points, List<Vector2> activeList,
-                                  int[,] grid, float cellSize, int gridWidth, int gridHeight)
-    {
-        points.Add(point);
-        activeList.Add(point);
-
-        int gx = Mathf.FloorToInt(point.x / cellSize);
-        int gy = Mathf.FloorToInt(point.y / cellSize);
-
-        if (gx >= 0 && gx < gridWidth && gy >= 0 && gy < gridHeight)
-        {
-            grid[gx, gy] = points.Count - 1;
-        }
-    }
-
-    private Vector2 GetRandomPointAround(Vector2 center, float minDist)
-    {
-        float angle = Random.Range(0f, Mathf.PI * 2);
-        float distance = Random.Range(minDist, minDist * 2);
-        return center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * distance;
-    }
-
-    private bool IsInBounds(Vector2 point, int padding)
-    {
-        return point.x >= padding && point.x < mapSize.x - padding &&
-               point.y >= padding && point.y < mapSize.y - padding;
-    }
-
-    private bool HasNeighbor(Vector2 point, List<Vector2> points, int[,] grid,
-                             float cellSize, float minDist, int gridWidth, int gridHeight)
-    {
-        int gx = Mathf.FloorToInt(point.x / cellSize);
-        int gy = Mathf.FloorToInt(point.y / cellSize);
-
-        for (int dx = -2; dx <= 2; dx++)
-        {
-            for (int dy = -2; dy <= 2; dy++)
+            for (int n = 0; n < settings.NodesPerCluster; n++)
             {
-                int checkX = gx + dx;
-                int checkY = gy + dy;
+                Vector2 offset = Random.insideUnitCircle * clusterRadius;
+                int x = centerX + Mathf.RoundToInt(offset.x);
+                int z = centerZ + Mathf.RoundToInt(offset.y);
+                Vector2Int pos = new Vector2Int(x, z);
 
-                if (checkX >= 0 && checkX < gridWidth && checkY >= 0 && checkY < gridHeight)
+                if (x >= padding && x < gridCellCountX - padding &&
+                    z >= padding && z < gridCellCountZ - padding &&
+                    !used.Contains(pos) && !IsCellInClearZone(x, z))
                 {
-                    int pointIndex = grid[checkX, checkY];
-                    if (pointIndex >= 0 && Vector2.Distance(points[pointIndex], point) < minDist)
-                    {
-                        return true;
-                    }
+                    positions.Add(pos);
+                    used.Add(pos);
                 }
             }
         }
 
-        return false;
-    }
-
-    private Vector2 GetRandomClusterCenter(ResourceSpawnSettings settings)
-    {
-        int padding = settings.EdgePadding + (int)settings.ClusterRadius;
-        Vector2 center;
-        int attempts = 0;
-
-        do
-        {
-            center = new Vector2(
-                Random.Range(padding, mapSize.x - padding),
-                Random.Range(padding, mapSize.y - padding)
-            );
-            attempts++;
-        }
-        while (IsInClearZone(center) && attempts < 50);
-
-        return center;
-    }
-
-    // ==================== 노드 스폰 ====================
-
-    private bool TrySpawnNode(ResourceNodeData nodeData, Vector3Int gridPos, ResourceSpawnSettings settings)
-    {
-        // Clear Zone 체크
-        Vector2 localPos = new Vector2(gridPos.x - mapOffset.x, gridPos.z - mapOffset.y);
-        if (IsInClearZone(localPos))
-            return false;
-
-        // 맵 범위 체크
-        if (!IsInMapBounds(gridPos))
-            return false;
-
-        // GridData 배치 가능 체크
-        if (!environmentGridData.CanPlaceObejctAt(gridPos, nodeData.Size))
-            return false;
-
-        // ★ 수정: PlacementSystem과 동일한 방식으로 월드 좌표 계산
-        Vector3 worldPos = grid.CellToWorld(gridPos);
-
-        // Grid cellSize 보정 (셀 중심에 배치)
-        worldPos += new Vector3(grid.cellSize.x * 0.5f, 0, grid.cellSize.z * 0.5f);
-
-        // 스폰
-        GameObject nodeObj = Instantiate(nodeData.Prefab, worldPos, Quaternion.identity);
-        nodeObj.transform.SetParent(nodesContainer);
-        nodeObj.name = $"{nodeData.Name}_{spawnedNodes.Count}";
-
-        // 스케일 변화
-        if (settings.ScaleVariation > 0)
-        {
-            float scale = 1f + Random.Range(-settings.ScaleVariation, settings.ScaleVariation);
-            nodeObj.transform.localScale *= scale;
-        }
-
-        // 회전 랜덤화
-        if (settings.RandomRotation)
-        {
-            nodeObj.transform.rotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
-        }
-
-        // 컴포넌트 설정
-        ResourceNode node = nodeObj.GetComponent<ResourceNode>();
-        if (node == null)
-        {
-            node = nodeObj.AddComponent<ResourceNode>();
-        }
-        node.Initialize(nodeData, gridPos);
-
-        // GridData에 등록
-        environmentGridData.AddObjectAt(gridPos, nodeData.Size, nodeData.ID, spawnedNodes.Count);
-
-        // 추적
-        spawnedNodes.Add(node);
-        node.OnDepleted += HandleNodeDepleted;
-
-        // ★ 디버그 로그 (문제 확인 후 제거)
-        if (logGeneration)
-        {
-            Debug.Log($"[MapGenerator] Spawned {nodeData.Name} at Grid:{gridPos} -> World:{worldPos}");
-        }
-
-        return true;
+        return positions;
     }
 
     // ==================== 유틸리티 ====================
 
-    private Vector3Int LocalToGridPosition(Vector2 localPos)
+    private Vector3Int CellIndexToGridPosition(int cellX, int cellZ)
     {
-        return new Vector3Int(
-            mapOffset.x + Mathf.RoundToInt(localPos.x),
-            0,
-            mapOffset.y + Mathf.RoundToInt(localPos.y)
-        );
+        int gridX = cellX + Mathf.RoundToInt(offsetX);
+        int gridZ = cellZ + Mathf.RoundToInt(offsetZ);
+        return new Vector3Int(gridX, 0, gridZ);
     }
 
-    private bool IsInClearZone(Vector2 localPos)
+    private bool IsCellInClearZone(int cellX, int cellZ)
     {
-        Vector2 clearLocal = new Vector2(
-            clearZoneCenter.x - mapOffset.x,
-            clearZoneCenter.y - mapOffset.y
-        );
-        return Vector2.Distance(localPos, clearLocal) < clearZoneRadius;
+        int dx = cellX - clearZoneCellX;
+        int dz = cellZ - clearZoneCellZ;
+        return (dx * dx + dz * dz) < (clearZoneRadius * clearZoneRadius);
     }
 
-    private bool IsInMapBounds(Vector3Int gridPos)
+    private bool IsCellInBounds(int cellX, int cellZ)
     {
-        return gridPos.x >= mapOffset.x && gridPos.x < mapOffset.x + mapSize.x &&
-               gridPos.z >= mapOffset.y && gridPos.z < mapOffset.y + mapSize.y;
+        return cellX >= 0 && cellX < gridCellCountX &&
+               cellZ >= 0 && cellZ < gridCellCountZ;
     }
 
     // ==================== 관리 ====================
@@ -565,96 +498,83 @@ public class MapGenerator : MonoBehaviour
                 Destroy(node.gameObject);
             }
         }
-
         spawnedNodes.Clear();
         environmentGridData = new GridData();
-
-        if (logGeneration)
-        {
-            Debug.Log("[MapGenerator] 맵 초기화됨");
-        }
     }
 
     private void HandleNodeDepleted(ResourceNode node)
     {
         if (!node.Data.CanRespawn)
         {
-            environmentGridData.RemoveObjectAt(node.GridPosition);
+            if (GridDataManager.Instance != null)
+                GridDataManager.Instance.RemoveObject(node.GridPosition);
+            else
+                environmentGridData.RemoveObjectAt(node.GridPosition);
             spawnedNodes.Remove(node);
         }
         node.OnDepleted -= HandleNodeDepleted;
     }
 
-    /// <summary>
-    /// GridData 반환 (PlacementSystem 연동)
-    /// </summary>
     public GridData GetEnvironmentGridData()
     {
-        return environmentGridData;
-    }
-
-    /// <summary>
-    /// 특정 위치에 노드 수동 추가
-    /// </summary>
-    public ResourceNode SpawnNodeAt(int nodeID, Vector3Int gridPos)
-    {
-        if (nodeDatabase == null) return null;
-
-        ResourceNodeData nodeData = nodeDatabase.GetNodeByID(nodeID);
-        if (nodeData == null || nodeData.Prefab == null) return null;
-
-        if (!IsInMapBounds(gridPos)) return null;
-        if (!environmentGridData.CanPlaceObejctAt(gridPos, nodeData.Size)) return null;
-
-        Vector3 worldPos = grid.CellToWorld(gridPos);
-        GameObject nodeObj = Instantiate(nodeData.Prefab, worldPos, Quaternion.identity);
-        nodeObj.transform.SetParent(nodesContainer);
-
-        ResourceNode node = nodeObj.GetComponent<ResourceNode>();
-        if (node == null) node = nodeObj.AddComponent<ResourceNode>();
-        node.Initialize(nodeData, gridPos);
-
-        environmentGridData.AddObjectAt(gridPos, nodeData.Size, nodeData.ID, spawnedNodes.Count);
-        spawnedNodes.Add(node);
-        node.OnDepleted += HandleNodeDepleted;
-
-        return node;
+        return GridDataManager.Instance != null
+            ? GridDataManager.Instance.GetRawGridData()
+            : environmentGridData;
     }
 
     // ==================== 디버그 ====================
 
+    [ContextMenu("Test: Compare with GridCellVisualizer")]
+    public void TestCompareCoordinates()
+    {
+        CacheGridSettings();
+
+        Debug.Log("=== MapGenerator vs GridCellVisualizer 비교 ===");
+        Debug.Log($"gridOrigin: {gridOrigin}");
+        Debug.Log($"offsetX: {offsetX}, offsetZ: {offsetZ}");
+        Debug.Log($"cellSize: {cellSize}");
+
+        int[][] testCells = {
+            new[] {0, 0},
+            new[] {1, 1},
+            new[] {10, 10},
+            new[] {gridCellCountX - 1, gridCellCountZ - 1}
+        };
+
+        foreach (var cell in testCells)
+        {
+            Vector3 corner = GetCellCornerPosition(cell[0], cell[1]);
+            Vector3 center = GetCellCenterPosition(cell[0], cell[1]);
+            Debug.Log($"Cell({cell[0]},{cell[1]}) → Corner:{corner}, Center:{center}");
+        }
+    }
+
     private void OnDrawGizmos()
     {
-        if (!showDebugGizmos) return;
+        if (!showDebugGizmos || gridLineSet == null) return;
 
-        // 맵 범위
-        Gizmos.color = Color.white;
-        Vector3 mapCenter = new Vector3(
-            mapOffset.x + mapSize.x / 2f,
-            0,
-            mapOffset.y + mapSize.y / 2f
-        );
-        Gizmos.DrawWireCube(mapCenter, new Vector3(mapSize.x, 0.1f, mapSize.y));
+        // 전체 경계
+        Gizmos.color = Color.yellow;
+        Vector3 center = grid != null ? grid.transform.position : Vector3.zero;
+        Gizmos.DrawWireCube(center, new Vector3(gridTotalSize.x, 0.1f, gridTotalSize.y));
 
         // Clear Zone
-        Gizmos.color = Color.green;
-        Vector3 clearCenter = new Vector3(clearZoneCenter.x, 0, clearZoneCenter.y);
-        DrawCircleGizmo(clearCenter, clearZoneRadius);
+        if (Application.isPlaying || gridOrigin != Vector3.zero)
+        {
+            Gizmos.color = Color.green;
+            Vector3 clearCenter = GetCellCenterPosition(clearZoneCellX, clearZoneCellZ);
+            DrawCircleGizmo(clearCenter, clearZoneRadius);
+        }
     }
 
     private void DrawCircleGizmo(Vector3 center, float radius)
     {
-        int segments = 32;
-        float angleStep = 360f / segments;
-
-        for (int i = 0; i < segments; i++)
+        for (int i = 0; i < 32; i++)
         {
-            float angle1 = i * angleStep * Mathf.Deg2Rad;
-            float angle2 = (i + 1) * angleStep * Mathf.Deg2Rad;
-
-            Vector3 p1 = center + new Vector3(Mathf.Cos(angle1), 0, Mathf.Sin(angle1)) * radius;
-            Vector3 p2 = center + new Vector3(Mathf.Cos(angle2), 0, Mathf.Sin(angle2)) * radius;
-
+            float a1 = (i / 32f) * Mathf.PI * 2f;
+            float a2 = ((i + 1) / 32f) * Mathf.PI * 2f;
+            Vector3 p1 = center + new Vector3(Mathf.Cos(a1), 0, Mathf.Sin(a1)) * radius;
+            Vector3 p2 = center + new Vector3(Mathf.Cos(a2), 0, Mathf.Sin(a2)) * radius;
             Gizmos.DrawLine(p1, p2);
         }
     }

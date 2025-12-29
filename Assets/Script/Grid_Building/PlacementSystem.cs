@@ -30,7 +30,7 @@ public class PlacementSystem : MonoBehaviour
 
     IBuildingState buildingState;
 
-    // 추가: 배치된 건물 추적 (GridPosition -> GameObject)
+    // 배치된 건물 추적 (GridPosition -> GameObject)
     private Dictionary<Vector3Int, GameObject> placedBuildings = new Dictionary<Vector3Int, GameObject>();
 
     // 이벤트
@@ -69,7 +69,16 @@ public class PlacementSystem : MonoBehaviour
 
         gridVisualization.SetActive(true);
 
-        GridData envData = mapGenerator != null ? mapGenerator.GetEnvironmentGridData() : null;
+        // ★ 수정: GridDataManager 사용
+        GridData envData = null;
+        if (GridDataManager.Instance != null)
+        {
+            envData = GridDataManager.Instance.GetRawGridData();
+        }
+        else if (mapGenerator != null)
+        {
+            envData = mapGenerator.GetEnvironmentGridData();
+        }
 
         buildingState = new PlacementState(
             ID,
@@ -80,7 +89,7 @@ public class PlacementSystem : MonoBehaviour
             furnitureData,
             objectPlacer,
             envData,
-            placedBuildings,  // 건물 추적용 Dictionary 전달
+            placedBuildings,
             OnBuildingPlacedInternal
         );
 
@@ -98,7 +107,7 @@ public class PlacementSystem : MonoBehaviour
             floorData,
             furnitureData,
             objectPlacer,
-            placedBuildings,  // 건물 추적용 Dictionary 전달
+            placedBuildings,
             OnBuildingRemovedInternal
         );
         inputManager.OnClicked += PlaceStructure;
@@ -146,10 +155,8 @@ public class PlacementSystem : MonoBehaviour
     {
         OnBuildingPlaced?.Invoke(building);
 
-        if (building != null && building.NeedsConstruction)
-        {
-            TaskManager.Instance?.AddConstructionTask(building);
-        }
+        // ★ 수정: Building이 스스로 TaskManager에 등록하므로 여기서는 호출 안 함
+        // TaskManager.Instance?.AddConstructionTask(building);  // 삭제됨
     }
 
     private void OnBuildingRemovedInternal(GameObject removedObj)
