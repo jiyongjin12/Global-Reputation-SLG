@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+ï»¿using System.Collections.Generic;
 using UnityEngine;
 
 public enum SpawnDistribution
@@ -42,7 +42,7 @@ public class ResourceSpawnSettings
 }
 
 /// <summary>
-/// ¸Ê »ı¼º±â - GridCellVisualizer¿Í µ¿ÀÏÇÑ ÁÂÇ¥ °è»ê
+/// ë§µ ìƒì„±ê¸° - GridCellVisualizerì™€ ë™ì¼í•œ ì¢Œí‘œ ê³„ì‚°
 /// </summary>
 public class MapGenerator : MonoBehaviour
 {
@@ -51,7 +51,7 @@ public class MapGenerator : MonoBehaviour
     [SerializeField] private GridLineSet gridLineSet;
     [SerializeField] private ResourceNodeDatabaseSO nodeDatabase;
 
-    [Header("Clear Zone (¼¿ ÀÎµ¦½º ±âÁØ)")]
+    [Header("Clear Zone (ì…€ ì¸ë±ìŠ¤ ê¸°ì¤€)")]
     [SerializeField] private int clearZoneCellX = 10;
     [SerializeField] private int clearZoneCellZ = 10;
     [SerializeField] private int clearZoneRadius = 3;
@@ -68,8 +68,8 @@ public class MapGenerator : MonoBehaviour
     [SerializeField] private bool showDebugGizmos = true;
     [SerializeField] private bool logGeneration = true;
 
-    // ¡Ú Ä³½Ã (GridCellVisualizer¿Í µ¿ÀÏÇÑ º¯¼ö¸í)
-    private Vector3 gridOrigin;      // ¡Ú GridÀÇ ¿ùµå À§Ä¡
+    // â˜… ìºì‹œ (GridCellVisualizerì™€ ë™ì¼í•œ ë³€ìˆ˜ëª…)
+    private Vector3 gridOrigin;      // â˜… Gridì˜ ì›”ë“œ ìœ„ì¹˜
     private Vector2 gridTotalSize;
     private Vector2 cellSize;
     private float offsetX;
@@ -77,7 +77,7 @@ public class MapGenerator : MonoBehaviour
     private int gridCellCountX;
     private int gridCellCountZ;
 
-    // µ¥ÀÌÅÍ
+    // ë°ì´í„°
     private GridData environmentGridData;
     private List<ResourceNode> spawnedNodes = new List<ResourceNode>();
     private Transform nodesContainer;
@@ -102,11 +102,11 @@ public class MapGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// ¡Ú GridCellVisualizer¿Í µ¿ÀÏÇÏ°Ô ¼³Á¤ Ä³½Ã
+    /// â˜… GridCellVisualizerì™€ ë™ì¼í•˜ê²Œ ì„¤ì • ìºì‹œ
     /// </summary>
     private void CacheGridSettings()
     {
-        // ¡Ú¡Ú¡Ú GridÀÇ ¿ùµå À§Ä¡ ÀúÀå ¡Ú¡Ú¡Ú
+        // â˜…â˜…â˜… Gridì˜ ì›”ë“œ ìœ„ì¹˜ ì €ì¥ â˜…â˜…â˜…
         if (grid != null)
         {
             gridOrigin = grid.transform.position;
@@ -114,10 +114,10 @@ public class MapGenerator : MonoBehaviour
         else
         {
             gridOrigin = Vector3.zero;
-            Debug.LogWarning("[MapGenerator] Grid°¡ ¼³Á¤µÇÁö ¾Ê¾Ò½À´Ï´Ù!");
+            Debug.LogWarning("[MapGenerator] Gridê°€ ì„¤ì •ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤!");
         }
 
-        // GridLineSet¿¡¼­ Å©±â Á¤º¸
+        // GridLineSetì—ì„œ í¬ê¸° ì •ë³´
         if (gridLineSet != null)
         {
             gridTotalSize = gridLineSet.gridTotalSize;
@@ -127,18 +127,18 @@ public class MapGenerator : MonoBehaviour
         {
             gridTotalSize = new Vector2(20f, 20f);
             cellSize = new Vector2(1f, 1f);
-            Debug.LogWarning("[MapGenerator] GridLineSetÀÌ ¼³Á¤µÇÁö ¾Ê¾Ò½À´Ï´Ù!");
+            Debug.LogWarning("[MapGenerator] GridLineSetì´ ì„¤ì •ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤!");
         }
 
-        // ¼¿ °³¼ö
+        // ì…€ ê°œìˆ˜
         gridCellCountX = Mathf.RoundToInt(gridTotalSize.x / cellSize.x);
         gridCellCountZ = Mathf.RoundToInt(gridTotalSize.y / cellSize.y);
 
-        // ¿ÀÇÁ¼Â (±×¸®µå Áß¾Ó Á¤·Ä)
+        // ì˜¤í”„ì…‹ (ê·¸ë¦¬ë“œ ì¤‘ì•™ ì •ë ¬)
         offsetX = -gridTotalSize.x / 2f;
         offsetZ = -gridTotalSize.y / 2f;
 
-        Debug.Log($"[MapGenerator] === ¼³Á¤ Ä³½Ã ¿Ï·á ===");
+        Debug.Log($"[MapGenerator] === ì„¤ì • ìºì‹œ ì™„ë£Œ ===");
         Debug.Log($"  gridOrigin: {gridOrigin}");
         Debug.Log($"  gridTotalSize: {gridTotalSize}");
         Debug.Log($"  cellSize: {cellSize}");
@@ -146,10 +146,10 @@ public class MapGenerator : MonoBehaviour
         Debug.Log($"  offset: ({offsetX}, {offsetZ})");
     }
 
-    // ==================== ¡Ú¡Ú¡Ú ÁÂÇ¥ °è»ê (GridCellVisualizer¿Í 100% µ¿ÀÏ) ¡Ú¡Ú¡Ú ====================
+    // ==================== â˜…â˜…â˜… ì¢Œí‘œ ê³„ì‚° (GridCellVisualizerì™€ 100% ë™ì¼) â˜…â˜…â˜… ====================
 
     /// <summary>
-    /// ¡Ú ¼¿ ÄÚ³Ê ÁÂÇ¥ (GridCellVisualizer¿Í µ¿ÀÏ)
+    /// â˜… ì…€ ì½”ë„ˆ ì¢Œí‘œ (GridCellVisualizerì™€ ë™ì¼)
     /// </summary>
     private Vector3 GetCellCornerPosition(int cellX, int cellZ)
     {
@@ -161,7 +161,7 @@ public class MapGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// ¡Ú ¼¿ Áß¾Ó ÁÂÇ¥ (GridCellVisualizer¿Í µ¿ÀÏ)
+    /// â˜… ì…€ ì¤‘ì•™ ì¢Œí‘œ (GridCellVisualizerì™€ ë™ì¼)
     /// </summary>
     private Vector3 GetCellCenterPosition(int cellX, int cellZ)
     {
@@ -169,24 +169,24 @@ public class MapGenerator : MonoBehaviour
         return corner + new Vector3(cellSize.x * 0.5f, 0, cellSize.y * 0.5f);
     }
 
-    // ==================== »ı¼º ·ÎÁ÷ ====================
+    // ==================== ìƒì„± ë¡œì§ ====================
 
     [ContextMenu("Generate Map")]
     public void GenerateMap()
     {
         if (nodeDatabase == null)
         {
-            Debug.LogError("[MapGenerator] ResourceNodeDatabaseSO°¡ ¾ø½À´Ï´Ù!");
+            Debug.LogError("[MapGenerator] ResourceNodeDatabaseSOê°€ ì—†ìŠµë‹ˆë‹¤!");
             return;
         }
 
         if (spawnSettings.Count == 0)
         {
-            Debug.LogError("[MapGenerator] Spawn Settings°¡ ºñ¾îÀÖ½À´Ï´Ù!");
+            Debug.LogError("[MapGenerator] Spawn Settingsê°€ ë¹„ì–´ìˆìŠµë‹ˆë‹¤!");
             return;
         }
 
-        // ¼³Á¤ ´Ù½Ã Ä³½Ã (¿¡µğÅÍ¿¡¼­ º¯°æµÆÀ» ¼ö ÀÖÀ½)
+        // ì„¤ì • ë‹¤ì‹œ ìºì‹œ (ì—ë””í„°ì—ì„œ ë³€ê²½ëì„ ìˆ˜ ìˆìŒ)
         CacheGridSettings();
 
         Random.InitState(useRandomSeed ? System.Environment.TickCount : randomSeed);
@@ -201,13 +201,13 @@ public class MapGenerator : MonoBehaviour
             ResourceNodeData nodeData = nodeDatabase.GetNodeByID(settings.NodeID);
             if (nodeData == null)
             {
-                Debug.LogWarning($"[MapGenerator] NodeID {settings.NodeID} ¾øÀ½: {settings.Name}");
+                Debug.LogWarning($"[MapGenerator] NodeID {settings.NodeID} ì—†ìŒ: {settings.Name}");
                 continue;
             }
 
             if (nodeData.Prefab == null)
             {
-                Debug.LogWarning($"[MapGenerator] {nodeData.Name} Prefab ¾øÀ½!");
+                Debug.LogWarning($"[MapGenerator] {nodeData.Name} Prefab ì—†ìŒ!");
                 continue;
             }
 
@@ -215,11 +215,11 @@ public class MapGenerator : MonoBehaviour
             totalSpawned += spawnedCount;
 
             if (logGeneration)
-                Debug.Log($"[MapGenerator] {settings.Name}: {spawnedCount}°³ »ı¼º");
+                Debug.Log($"[MapGenerator] {settings.Name}: {spawnedCount}ê°œ ìƒì„±");
         }
 
         if (logGeneration)
-            Debug.Log($"[MapGenerator] ÃÑ {totalSpawned}°³ »ı¼º ¿Ï·á");
+            Debug.Log($"[MapGenerator] ì´ {totalSpawned}ê°œ ìƒì„± ì™„ë£Œ");
     }
 
     private int SpawnNodes(ResourceSpawnSettings settings, ResourceNodeData nodeData)
@@ -242,71 +242,98 @@ public class MapGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// ¡Ú ³ëµå ½ºÆù (¼¿ Áß¾Ó¿¡ Á¤È®È÷!)
+    /// â˜… ë…¸ë“œ ìŠ¤í° (ì…€ ì¤‘ì•™ì— ì •í™•íˆ!)
     /// </summary>
     private bool TrySpawnNodeAtCell(ResourceNodeData nodeData, int cellX, int cellZ, ResourceSpawnSettings settings)
     {
-        if (IsCellInClearZone(cellX, cellZ))
-            return false;
+        Vector2Int size = nodeData.Size;
 
-        if (!IsCellInBounds(cellX, cellZ))
-            return false;
+        // Clear Zone ì²´í¬ (ëª¨ë“  ì…€)
+        for (int x = 0; x < size.x; x++)
+        {
+            for (int z = 0; z < size.y; z++)
+            {
+                if (IsCellInClearZone(cellX + x, cellZ + z))
+                    return false;
+            }
+        }
 
+        // ë²”ìœ„ ì²´í¬ (ëª¨ë“  ì…€)
+        for (int x = 0; x < size.x; x++)
+        {
+            for (int z = 0; z < size.y; z++)
+            {
+                if (!IsCellInBounds(cellX + x, cellZ + z))
+                    return false;
+            }
+        }
+
+        // ë°°ì¹˜ ê°€ëŠ¥ ì²´í¬
         Vector3Int gridPos = CellIndexToGridPosition(cellX, cellZ);
 
-        // ¹èÄ¡ °¡´É Ã¼Å©
         if (GridDataManager.Instance != null)
         {
-            if (!GridDataManager.Instance.CanPlaceAtCell(cellX, cellZ, nodeData.Size))
+            if (!GridDataManager.Instance.CanPlaceAtCell(cellX, cellZ, size))
                 return false;
         }
         else
         {
-            if (!environmentGridData.CanPlaceObejctAt(gridPos, nodeData.Size))
+            if (!environmentGridData.CanPlaceObejctAt(gridPos, size))
                 return false;
         }
 
-        // ¡Ú¡Ú¡Ú ¼¿ Áß¾Ó ÁÂÇ¥ (GridCellVisualizer¿Í µ¿ÀÏÇÑ °è»ê!) ¡Ú¡Ú¡Ú
-        Vector3 worldPos = GetCellCenterPosition(cellX, cellZ);
+        // â˜…â˜…â˜… í¬ê¸°ì— ë§ëŠ” ì¤‘ì•™ ì¢Œí‘œ ê³„ì‚° â˜…â˜…â˜…
+        // ì¢Œí•˜ë‹¨ ì½”ë„ˆ ì¢Œí‘œ
+        Vector3 corner = GetCellCornerPosition(cellX, cellZ);
+
+        // í¬ê¸°ì— ë”°ë¥¸ ì¤‘ì•™ ì˜¤í”„ì…‹
+        // 1x1: (0.5, 0.5) - 1ì¹¸ ì¤‘ì•™
+        // 2x2: (1.0, 1.0) - 4ì¹¸ ì¤‘ì•™
+        // 3x3: (1.5, 1.5) - 9ì¹¸ ì¤‘ì•™
+        Vector3 worldPos = corner + new Vector3(
+            size.x * cellSize.x * 0.5f,
+            0,
+            size.y * cellSize.y * 0.5f
+        );
 
         if (logGeneration)
         {
-            Debug.Log($"[MapGenerator] ½ºÆù: Cell({cellX},{cellZ}) ¡æ World{worldPos}");
+            Debug.Log($"[MapGenerator] {nodeData.Name} Size({size.x}x{size.y}): Cell({cellX},{cellZ}) â†’ World({worldPos.x:F2}, {worldPos.y:F2}, {worldPos.z:F2})");
         }
 
-        // ½ºÆù
+        // ìŠ¤í°
         GameObject nodeObj = Instantiate(nodeData.Prefab, worldPos, Quaternion.identity);
         nodeObj.transform.SetParent(nodesContainer);
         nodeObj.name = $"{nodeData.Name}_{spawnedNodes.Count}";
 
-        // ½ºÄÉÀÏ
+        // ìŠ¤ì¼€ì¼
         if (settings.ScaleVariation > 0)
         {
             float scale = 1f + Random.Range(-settings.ScaleVariation, settings.ScaleVariation);
             nodeObj.transform.localScale *= scale;
         }
 
-        // È¸Àü
+        // íšŒì „
         if (settings.RandomRotation)
         {
             nodeObj.transform.rotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
         }
 
-        // ResourceNode ÄÄÆ÷³ÍÆ®
+        // ResourceNode ì»´í¬ë„ŒíŠ¸
         ResourceNode node = nodeObj.GetComponent<ResourceNode>();
         if (node == null)
             node = nodeObj.AddComponent<ResourceNode>();
 
         node.Initialize(nodeData, gridPos);
 
-        // GridData µî·Ï
+        // GridData ë“±ë¡ (origin ìœ„ì¹˜ëŠ” ê·¸ëŒ€ë¡œ ì¢Œí•˜ë‹¨ ì…€!)
         if (GridDataManager.Instance != null)
         {
-            GridDataManager.Instance.PlaceObjectAtCell(cellX, cellZ, nodeData.Size, nodeData.ID, PlacedObjectType.ResourceNode, nodeObj);
+            GridDataManager.Instance.PlaceObjectAtCell(cellX, cellZ, size, nodeData.ID, PlacedObjectType.ResourceNode, nodeObj);
         }
         else
         {
-            environmentGridData.AddObjectAt(gridPos, nodeData.Size, nodeData.ID, spawnedNodes.Count);
+            environmentGridData.AddObjectAt(gridPos, size, nodeData.ID, spawnedNodes.Count);
         }
 
         spawnedNodes.Add(node);
@@ -315,7 +342,7 @@ public class MapGenerator : MonoBehaviour
         return true;
     }
 
-    // ==================== ¼¿ À§Ä¡ »ı¼º ====================
+    // ==================== ì…€ ìœ„ì¹˜ ìƒì„± ====================
 
     private List<Vector2Int> GenerateCellPositions(ResourceSpawnSettings settings)
     {
@@ -362,7 +389,7 @@ public class MapGenerator : MonoBehaviour
         int padding = settings.EdgePadding;
         int minDist = Mathf.Max(1, Mathf.CeilToInt(settings.MinDistance));
 
-        // Ã¹ Æ÷ÀÎÆ®
+        // ì²« í¬ì¸íŠ¸
         for (int attempt = 0; attempt < 100 && positions.Count == 0; attempt++)
         {
             int x = Random.Range(padding, gridCellCountX - padding);
@@ -463,7 +490,7 @@ public class MapGenerator : MonoBehaviour
         return positions;
     }
 
-    // ==================== À¯Æ¿¸®Æ¼ ====================
+    // ==================== ìœ í‹¸ë¦¬í‹° ====================
 
     private Vector3Int CellIndexToGridPosition(int cellX, int cellZ)
     {
@@ -485,7 +512,7 @@ public class MapGenerator : MonoBehaviour
                cellZ >= 0 && cellZ < gridCellCountZ;
     }
 
-    // ==================== °ü¸® ====================
+    // ==================== ê´€ë¦¬ ====================
 
     [ContextMenu("Clear Map")]
     public void ClearMap()
@@ -522,14 +549,14 @@ public class MapGenerator : MonoBehaviour
             : environmentGridData;
     }
 
-    // ==================== µğ¹ö±× ====================
+    // ==================== ë””ë²„ê·¸ ====================
 
     [ContextMenu("Test: Compare with GridCellVisualizer")]
     public void TestCompareCoordinates()
     {
         CacheGridSettings();
 
-        Debug.Log("=== MapGenerator vs GridCellVisualizer ºñ±³ ===");
+        Debug.Log("=== MapGenerator vs GridCellVisualizer ë¹„êµ ===");
         Debug.Log($"gridOrigin: {gridOrigin}");
         Debug.Log($"offsetX: {offsetX}, offsetZ: {offsetZ}");
         Debug.Log($"cellSize: {cellSize}");
@@ -545,7 +572,7 @@ public class MapGenerator : MonoBehaviour
         {
             Vector3 corner = GetCellCornerPosition(cell[0], cell[1]);
             Vector3 center = GetCellCenterPosition(cell[0], cell[1]);
-            Debug.Log($"Cell({cell[0]},{cell[1]}) ¡æ Corner:{corner}, Center:{center}");
+            Debug.Log($"Cell({cell[0]},{cell[1]}) â†’ Corner:{corner}, Center:{center}");
         }
     }
 
@@ -553,7 +580,7 @@ public class MapGenerator : MonoBehaviour
     {
         if (!showDebugGizmos || gridLineSet == null) return;
 
-        // ÀüÃ¼ °æ°è
+        // ì „ì²´ ê²½ê³„
         Gizmos.color = Color.yellow;
         Vector3 center = grid != null ? grid.transform.position : Vector3.zero;
         Gizmos.DrawWireCube(center, new Vector3(gridTotalSize.x, 0.1f, gridTotalSize.y));

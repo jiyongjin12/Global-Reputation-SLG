@@ -2,10 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// 그리드 데이터 통합 관리자 (Single Source of Truth)
-/// GridLineSet 설정 기반 좌표 계산
-/// </summary>
 public class GridDataManager : MonoBehaviour
 {
     public static GridDataManager Instance { get; private set; }
@@ -14,17 +10,14 @@ public class GridDataManager : MonoBehaviour
     [SerializeField] private Grid grid;
     [SerializeField] private GridLineSet gridLineSet;
 
-    // 내부 GridData
+    // 내부 데이터
     private GridData gridData;
-
-    // 배치된 오브젝트 추적
     private Dictionary<Vector3Int, PlacedObjectInfo> placedObjects = new();
     private int objectIndexCounter = 0;
 
-    // 캐시된 설정값
-    private Vector2 gridTotalSize;
-    private Vector2 cellSize;
-    private Vector3 gridOrigin;
+    // 캐시
+    private int gridCellCountX;
+    private int gridCellCountZ;
     private float offsetX;
     private float offsetZ;
 
@@ -34,8 +27,8 @@ public class GridDataManager : MonoBehaviour
 
     // Properties
     public Grid Grid => grid;
-    public Vector2 GridTotalSize => gridTotalSize;
-    public Vector2 CellSize => cellSize;
+    public int CellCountX => gridCellCountX;
+    public int CellCountZ => gridCellCountZ;
 
     private void Awake()
     {
@@ -51,149 +44,100 @@ public class GridDataManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// GridLineSet에서 설정값 캐시
-    /// </summary>
     private void CacheGridSettings()
     {
         if (gridLineSet != null)
         {
-            gridTotalSize = gridLineSet.gridTotalSize;
-            cellSize = gridLineSet.cellSize;
-        }
-        else if (grid != null)
-        {
-            gridTotalSize = new Vector2(20f, 20f);  // 기본값
-            cellSize = new Vector2(grid.cellSize.x, grid.cellSize.z);
+            gridCellCountX = Mathf.RoundToInt(gridLineSet.gridTotalSize.x / gridLineSet.cellSize.x);
+            gridCellCountZ = Mathf.RoundToInt(gridLineSet.gridTotalSize.y / gridLineSet.cellSize.y);
+            offsetX = -gridLineSet.gridTotalSize.x / 2f;
+            offsetZ = -gridLineSet.gridTotalSize.y / 2f;
         }
         else
         {
-            gridTotalSize = new Vector2(20f, 20f);
-            cellSize = new Vector2(1f, 1f);
+            gridCellCountX = 20;
+            gridCellCountZ = 20;
+            offsetX = -10f;
+            offsetZ = -10f;
         }
 
-        gridOrigin = grid != null ? grid.transform.position : Vector3.zero;
-
-        // 그리드 중앙 정렬 오프셋
-        offsetX = -gridTotalSize.x / 2f;
-        offsetZ = -gridTotalSize.y / 2f;
-
-        Debug.Log($"[GridDataManager] 설정 캐시됨:");
-        Debug.Log($"  gridTotalSize: {gridTotalSize}");
-        Debug.Log($"  cellSize: {cellSize}");
-        Debug.Log($"  gridOrigin: {gridOrigin}");
-        Debug.Log($"  offset: ({offsetX}, {offsetZ})");
+        Debug.Log($"[GridDataManager] Grid: {gridCellCountX}x{gridCellCountZ}, offset: ({offsetX}, {offsetZ})");
     }
 
-    // ==================== 좌표 변환 (핵심!) ====================
+    // ==================== 좌표 변환 (기존 유지) ====================
 
     /// <summary>
-    /// 셀 인덱스 → 월드 좌표 (셀 중앙)
+    /// Grid 좌표 → 셀 인덱스
     /// </summary>
-    public Vector3 CellIndexToWorldCenter(int cellX, int cellZ)
+    public (int cellX, int cellZ) GridPositionToCellIndex(Vector3Int gridPos)
     {
-        float worldX = gridOrigin.x + offsetX + (cellX * cellSize.x) + (cellSize.x * 0.5f);
-        float worldZ = gridOrigin.z + offsetZ + (cellZ * cellSize.y) + (cellSize.y * 0.5f);
-        return new Vector3(worldX, gridOrigin.y, worldZ);
+        int cellX = gridPos.x - Mathf.RoundToInt(offsetX);
+        int cellZ = gridPos.z - Mathf.RoundToInt(offsetZ);
+        return (cellX, cellZ);
     }
 
     /// <summary>
-    /// 셀 인덱스 → 월드 좌표 (셀 코너/좌하단)
+    /// 셀 인덱스 → Grid 좌표
     /// </summary>
-    public Vector3 CellIndexToWorldCorner(int cellX, int cellZ)
+    public Vector3Int CellIndexToGridPosition(int cellX, int cellZ)
     {
-        float worldX = gridOrigin.x + offsetX + (cellX * cellSize.x);
-        float worldZ = gridOrigin.z + offsetZ + (cellZ * cellSize.y);
-        return new Vector3(worldX, gridOrigin.y, worldZ);
-    }
-
-    /// <summary>
-    /// Grid 좌표 (Vector3Int) → 월드 좌표 (셀 중앙)
-    /// </summary>
-    public Vector3 GridToWorldPosition(Vector3Int gridPosition)
-    {
-        // gridPosition은 오프셋이 적용된 좌표일 수 있음
-        // 예: (-5, 0, -5) 같은 음수 좌표
-
-        // 셀 인덱스로 변환 (오프셋 고려)
-        int cellX = gridPosition.x - Mathf.RoundToInt(offsetX);
-        int cellZ = gridPosition.z - Mathf.RoundToInt(offsetZ);
-
-        return CellIndexToWorldCenter(cellX, cellZ);
-    }
-
-    /// <summary>
-    /// 월드 좌표 → Grid 좌표
-    /// </summary>
-    public Vector3Int WorldToGridPosition(Vector3 worldPosition)
-    {
-        // 셀 인덱스 계산
-        int cellX = Mathf.FloorToInt((worldPosition.x - gridOrigin.x - offsetX) / cellSize.x);
-        int cellZ = Mathf.FloorToInt((worldPosition.z - gridOrigin.z - offsetZ) / cellSize.y);
-
-        // Grid 좌표로 변환 (오프셋 적용)
         int gridX = cellX + Mathf.RoundToInt(offsetX);
         int gridZ = cellZ + Mathf.RoundToInt(offsetZ);
-
         return new Vector3Int(gridX, 0, gridZ);
     }
 
+    // ==================== ★ 범위 체크 (핵심 수정!) ★ ====================
+
     /// <summary>
-    /// 셀 인덱스가 유효한 범위인지 체크
+    /// 셀 인덱스가 맵 범위 내인지 체크
     /// </summary>
-    public bool IsValidCellIndex(int cellX, int cellZ)
+    public bool IsCellInBounds(int cellX, int cellZ)
     {
-        int maxX = Mathf.RoundToInt(gridTotalSize.x / cellSize.x);
-        int maxZ = Mathf.RoundToInt(gridTotalSize.y / cellSize.y);
-        return cellX >= 0 && cellX < maxX && cellZ >= 0 && cellZ < maxZ;
+        return cellX >= 0 && cellX < gridCellCountX &&
+               cellZ >= 0 && cellZ < gridCellCountZ;
     }
 
-    // ==================== 배치 API ====================
+    /// <summary>
+    /// ★ 배치 가능 여부 (Grid 좌표 기준) - 모든 셀 범위 체크!
+    /// </summary>
+    public bool CanPlaceAt(Vector3Int gridPosition, Vector2Int size)
+    {
+        var (baseCellX, baseCellZ) = GridPositionToCellIndex(gridPosition);
+
+        // ★ 모든 점유할 셀이 맵 범위 내인지 체크
+        for (int x = 0; x < size.x; x++)
+        {
+            for (int z = 0; z < size.y; z++)
+            {
+                int checkX = baseCellX + x;
+                int checkZ = baseCellZ + z;
+
+                if (!IsCellInBounds(checkX, checkZ))
+                {
+                    Debug.Log($"[GridDataManager] 범위 초과: Cell({checkX},{checkZ}) - 맵: {gridCellCountX}x{gridCellCountZ}");
+                    return false;
+                }
+            }
+        }
+
+        // GridData 점유 체크
+        return gridData.CanPlaceObejctAt(gridPosition, size);
+    }
 
     /// <summary>
     /// 배치 가능 여부 (셀 인덱스 기준)
     /// </summary>
     public bool CanPlaceAtCell(int cellX, int cellZ, Vector2Int size)
     {
-        for (int x = 0; x < size.x; x++)
-        {
-            for (int z = 0; z < size.y; z++)
-            {
-                if (!IsValidCellIndex(cellX + x, cellZ + z))
-                    return false;
-            }
-        }
-
         Vector3Int gridPos = CellIndexToGridPosition(cellX, cellZ);
-        return gridData.CanPlaceObejctAt(gridPos, size);
+        return CanPlaceAt(gridPos, size);
     }
 
-    /// <summary>
-    /// 배치 가능 여부 (Grid 좌표 기준)
-    /// </summary>
-    public bool CanPlaceAt(Vector3Int gridPosition, Vector2Int size)
-    {
-        return gridData.CanPlaceObejctAt(gridPosition, size);
-    }
+    // ==================== 배치/제거 (기존 유지) ====================
 
-    /// <summary>
-    /// 오브젝트 배치 (셀 인덱스 기준)
-    /// </summary>
-    public bool PlaceObjectAtCell(int cellX, int cellZ, Vector2Int size, int id, PlacedObjectType type, GameObject obj = null)
-    {
-        if (!CanPlaceAtCell(cellX, cellZ, size))
-            return false;
-
-        Vector3Int gridPos = CellIndexToGridPosition(cellX, cellZ);
-        return PlaceObject(gridPos, size, id, type, obj);
-    }
-
-    /// <summary>
-    /// 오브젝트 배치 (Grid 좌표 기준)
-    /// </summary>
     public bool PlaceObject(Vector3Int gridPosition, Vector2Int size, int id, PlacedObjectType type, GameObject obj = null)
     {
-        if (!gridData.CanPlaceObejctAt(gridPosition, size))
+        if (!CanPlaceAt(gridPosition, size))
             return false;
 
         int index = objectIndexCounter++;
@@ -214,15 +158,18 @@ public class GridDataManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 오브젝트 제거
-    /// </summary>
+    public bool PlaceObjectAtCell(int cellX, int cellZ, Vector2Int size, int id, PlacedObjectType type, GameObject obj = null)
+    {
+        Vector3Int gridPos = CellIndexToGridPosition(cellX, cellZ);
+        return PlaceObject(gridPos, size, id, type, obj);
+    }
+
     public bool RemoveObject(Vector3Int gridPosition)
     {
         if (!placedObjects.TryGetValue(gridPosition, out var info))
             return false;
 
-        gridData.RemoveObjectAt(gridPosition);
+        gridData.RemoveObjectAt(info.OriginPosition);
 
         for (int x = 0; x < info.Size.x; x++)
         {
@@ -237,39 +184,11 @@ public class GridDataManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 특정 위치 오브젝트 정보
-    /// </summary>
     public PlacedObjectInfo GetObjectAt(Vector3Int gridPosition)
     {
         return placedObjects.TryGetValue(gridPosition, out var info) ? info : null;
     }
 
-    // ==================== 유틸리티 ====================
-
-    /// <summary>
-    /// 셀 인덱스 → Grid 좌표
-    /// </summary>
-    public Vector3Int CellIndexToGridPosition(int cellX, int cellZ)
-    {
-        int gridX = cellX + Mathf.RoundToInt(offsetX);
-        int gridZ = cellZ + Mathf.RoundToInt(offsetZ);
-        return new Vector3Int(gridX, 0, gridZ);
-    }
-
-    /// <summary>
-    /// Grid 좌표 → 셀 인덱스
-    /// </summary>
-    public (int cellX, int cellZ) GridPositionToCellIndex(Vector3Int gridPosition)
-    {
-        int cellX = gridPosition.x - Mathf.RoundToInt(offsetX);
-        int cellZ = gridPosition.z - Mathf.RoundToInt(offsetZ);
-        return (cellX, cellZ);
-    }
-
-    /// <summary>
-    /// 전체 초기화
-    /// </summary>
     public void ClearAll()
     {
         gridData = new GridData();
@@ -277,39 +196,9 @@ public class GridDataManager : MonoBehaviour
         objectIndexCounter = 0;
     }
 
-    /// <summary>
-    /// 기존 GridData 직접 접근 (호환성용)
-    /// </summary>
     public GridData GetRawGridData() => gridData;
-
-    /// <summary>
-    /// 그리드 정보 로그
-    /// </summary>
-    [ContextMenu("Log Grid Info")]
-    public void LogGridInfo()
-    {
-        Debug.Log($"=== GridDataManager Info ===");
-        Debug.Log($"gridTotalSize: {gridTotalSize}");
-        Debug.Log($"cellSize: {cellSize}");
-        Debug.Log($"gridOrigin: {gridOrigin}");
-        Debug.Log($"offset: ({offsetX}, {offsetZ})");
-        Debug.Log($"placedObjects count: {placedObjects.Count}");
-
-        // 테스트 좌표 변환
-        Debug.Log($"=== 좌표 변환 테스트 ===");
-        for (int i = 0; i < 3; i++)
-        {
-            Vector3 center = CellIndexToWorldCenter(i, i);
-            Vector3 corner = CellIndexToWorldCorner(i, i);
-            Vector3Int gridPos = CellIndexToGridPosition(i, i);
-            Debug.Log($"Cell({i},{i}) → Corner: {corner}, Center: {center}, GridPos: {gridPos}");
-        }
-    }
 }
 
-/// <summary>
-/// 배치된 오브젝트 정보
-/// </summary>
 [Serializable]
 public class PlacedObjectInfo
 {

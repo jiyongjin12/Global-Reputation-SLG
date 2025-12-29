@@ -42,18 +42,14 @@ public class PlacementState : IBuildingState
         if (selectedObjectIndex > -1)
         {
             ObjectData objData = database.objectsData[selectedObjectIndex];
-
-            // Blueprint 프리팹이 있으면 사용, 없으면 기존 Prefab 사용
             GameObject previewPrefab = objData.BlueprintPrefab ?? objData.Prefab;
 
-            // null 체크 - 프리팹이 없으면 커서만 표시
             if (previewPrefab != null)
             {
                 previewSystem.StartShowingPlacementPreview(previewPrefab, objData.Size);
             }
             else
             {
-                // 프리팹 없이 커서만 표시
                 previewSystem.StartShowingPlacementPreviewCursorOnly(objData.Size);
             }
         }
@@ -71,14 +67,14 @@ public class PlacementState : IBuildingState
     public void OnAction(Vector3Int gridPosition)
     {
         bool placementValidity = CheckPlacementValidity(gridPosition, selectedObjectIndex);
-        if (placementValidity == false)
+        if (!placementValidity)
         {
             return;
         }
 
         ObjectData objectData = database.objectsData[selectedObjectIndex];
 
-        // 자원 비용 체크 & 소모
+        // 자원 체크
         if (objectData.ConstructionCosts != null && objectData.ConstructionCosts.Length > 0)
         {
             if (!ResourceManager.Instance.CanAfford(objectData.ConstructionCosts))
@@ -89,14 +85,14 @@ public class PlacementState : IBuildingState
             ResourceManager.Instance.PayCosts(objectData.ConstructionCosts);
         }
 
+        // ★ 기존 좌표 계산 유지!
         Vector3 worldPos = grid.CellToWorld(gridPosition);
+
         GameObject placedObject = null;
         Building building = null;
 
-        // 건설 작업이 필요한 경우 (ConstructionWorkRequired > 0)
         if (objectData.ConstructionWorkRequired > 0)
         {
-            // Building 컴포넌트로 생성 (Blueprint 상태)
             GameObject buildingObj = new GameObject($"Building_{objectData.Name}");
             buildingObj.transform.position = worldPos;
 
@@ -107,14 +103,12 @@ public class PlacementState : IBuildingState
         }
         else
         {
-            // 즉시 건설 (ConstructionWorkRequired가 0인 경우)
             if (objectData.Prefab != null)
             {
                 placedObject = UnityEngine.Object.Instantiate(objectData.Prefab);
                 placedObject.transform.position = worldPos;
                 placedObject.name = $"Building_{objectData.Name}";
 
-                // Building 컴포넌트 추가 (완료 상태)
                 building = placedObject.AddComponent<Building>();
                 building.Initialize(objectData, gridPosition, instantBuild: true);
             }
@@ -128,7 +122,16 @@ public class PlacementState : IBuildingState
         GridData selectedData = objectData.ID == 0 ? floorData : furnitureData;
         selectedData.AddObjectAt(gridPosition, objectData.Size, objectData.ID, 0);
 
-        // 배치된 건물 추적 (크기가 1보다 큰 건물은 모든 셀에 등록)
+        // ★ GridDataManager에도 등록
+        if (GridDataManager.Instance != null)
+        {
+            PlacedObjectType objType = objectData.Type == BuildingType.Floor
+                ? PlacedObjectType.Floor
+                : PlacedObjectType.Building;
+            GridDataManager.Instance.PlaceObject(gridPosition, objectData.Size, objectData.ID, objType, placedObject);
+        }
+
+        // 배치된 건물 추적 (모든 셀에 등록)
         if (placedObject != null)
         {
             for (int x = 0; x < objectData.Size.x; x++)
@@ -141,24 +144,40 @@ public class PlacementState : IBuildingState
             }
         }
 
-        // 콜백 호출
         if (building != null)
         {
             onBuildingPlaced?.Invoke(building);
         }
 
+        // ★ 기존 프리뷰 업데이트 유지
         previewSystem.UpdatePosition(grid.CellToWorld(gridPosition), false);
     }
 
+    /// <summary>
+    /// ★ 배치 가능 여부 - 범위 체크 강화!
+    /// </summary>
     private bool CheckPlacementValidity(Vector3Int gridPosition, int selectedObjectIndex)
     {
         ObjectData objectData = database.objectsData[selectedObjectIndex];
+        Vector2Int size = objectData.Size;
+
+        // ★ GridDataManager로 범위 체크 (2x2 등 모든 셀이 맵 안에 있는지)
+        if (GridDataManager.Instance != null)
+        {
+            if (!GridDataManager.Instance.CanPlaceAt(gridPosition, size))
+            {
+                return false;
+            }
+        }
+
+        // 기존 GridData 체크
         GridData selectedData = objectData.ID == 0 ? floorData : furnitureData;
 
-        if (!selectedData.CanPlaceObejctAt(gridPosition, objectData.Size))
+        if (!selectedData.CanPlaceObejctAt(gridPosition, size))
             return false;
 
-        if (environmentData != null && !environmentData.CanPlaceObejctAt(gridPosition, objectData.Size))
+        // 환경 오브젝트 체크
+        if (environmentData != null && !environmentData.CanPlaceObejctAt(gridPosition, size))
             return false;
 
         return true;
@@ -167,6 +186,7 @@ public class PlacementState : IBuildingState
     public void UpdateState(Vector3Int gridPosition)
     {
         bool placementValidity = CheckPlacementValidity(gridPosition, selectedObjectIndex);
+        // ★ 기존 좌표 계산 유지!
         previewSystem.UpdatePosition(grid.CellToWorld(gridPosition), placementValidity);
     }
 }
