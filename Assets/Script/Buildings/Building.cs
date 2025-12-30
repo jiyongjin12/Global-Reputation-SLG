@@ -47,7 +47,7 @@ public class Building : MonoBehaviour
     }
 
     /// <summary>
-    /// 스스로 TaskManager에 등록
+    /// TaskManager
     /// </summary>
     private void RegisterConstructionTask()
     {
@@ -56,12 +56,12 @@ public class Building : MonoBehaviour
         var taskData = new TaskData(TaskType.Construct, transform.position, gameObject)
         {
             Priority = TaskPriority.Normal,
-            MaxWorkers = Mathf.Clamp(data.Size.x * data.Size.y, 1, 3),
+            MaxWorkers = Mathf.Max(2, data.Size.x * data.Size.y), // 최소 2명
             WorkRequired = data.ConstructionWorkRequired
         };
 
         constructionTask = TaskManager.Instance.PostTask(taskData, this);
-        Debug.Log($"[Building] {data.Name} 건설 작업 등록");
+        Debug.Log($"[Building] {data.Name}");
     }
 
     public bool DoConstructionWork(float workAmount)
@@ -100,7 +100,7 @@ public class Building : MonoBehaviour
         }
 
         OnConstructionComplete?.Invoke(this);
-        Debug.Log($"[Building] {data?.Name} 건설 완료!");
+        Debug.Log($"[Building] {data?.Name}");
     }
 
     private void SetState(BuildingState newState) => currentState = newState;

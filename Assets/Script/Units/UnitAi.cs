@@ -41,7 +41,7 @@ public class UnitAI : MonoBehaviour
 {
     [Header("=== 기본 설정 ===")]
     [SerializeField] private float decisionInterval = 0.5f;
-    [SerializeField] private float workRadius = 2f;
+    [SerializeField] private float workRadius = 0.8f; // ★ 목표 위치 근처면 작업 시작
     [SerializeField] private float wanderRadius = 10f;
 
     [Header("=== 배고픔 설정 ===")]
@@ -370,48 +370,92 @@ public class UnitAI : MonoBehaviour
 
     private Vector3 CalculateDistributedWorkPosition(PostedTask task)
     {
-        Vector3 buildingCenter = task.Data.TargetPosition;
+        Vector3 buildingOrigin = task.Data.TargetPosition; // 좌하단 모서리
         Vector2Int buildingSize = Vector2Int.one;
 
         var building = task.Owner as Building;
         if (building?.Data != null)
             buildingSize = building.Data.Size;
 
-        float halfX = buildingSize.x * 0.5f;
-        float halfZ = buildingSize.y * 0.5f;
-        float workDistance = Mathf.Max(halfX, halfZ) + 0.5f;
+        // ★ 실제 건물 중심 계산 (좌하단 + 크기의 절반)
+        Vector3 buildingCenter = buildingOrigin + new Vector3(buildingSize.x / 2f, 0, buildingSize.y / 2f);
 
-        int workerIndex = 0;
-        if (task.AssignedUnits != null)
-        {
-            workerIndex = task.AssignedUnits.IndexOf(unit);
-            if (workerIndex < 0) workerIndex = task.AssignedUnits.Count;
-        }
+        // 건물 크기/2 + 0.2 = 작업 가능 박스 범위
+        float halfX = buildingSize.x / 2f + 0.2f;
+        float halfZ = buildingSize.y / 2f + 0.2f;
 
-        Vector3[] directions = new Vector3[]
-        {
-            new Vector3(0, 0, 1), new Vector3(0, 0, -1),
-            new Vector3(-1, 0, 0), new Vector3(1, 0, 0),
-            new Vector3(-0.7f, 0, 0.7f), new Vector3(0.7f, 0, 0.7f),
-            new Vector3(-0.7f, 0, -0.7f), new Vector3(0.7f, 0, -0.7f),
-        };
+        // 디버그용 저장
+        debugBuildingCenter = buildingCenter;
+        debugBoxHalfX = halfX;
+        debugBoxHalfZ = halfZ;
 
-        int dirIndex = workerIndex % directions.Length;
-        Vector3 baseDirection = directions[dirIndex];
+        // 박스 안에서 랜덤 위치
+        float randomX = Random.Range(-halfX, halfX);
+        float randomZ = Random.Range(-halfZ, halfZ);
 
-        float randomAngle = Random.Range(-30f, 30f) * Mathf.Deg2Rad;
-        Vector3 randomizedDir = new Vector3(
-            baseDirection.x * Mathf.Cos(randomAngle) - baseDirection.z * Mathf.Sin(randomAngle),
-            0,
-            baseDirection.x * Mathf.Sin(randomAngle) + baseDirection.z * Mathf.Cos(randomAngle)
-        );
+        Vector3 targetPos = buildingCenter + new Vector3(randomX, 0, randomZ);
 
-        Vector3 targetPos = buildingCenter + randomizedDir.normalized * workDistance;
-
-        if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, 2f, NavMesh.AllAreas))
+        // NavMesh 위치 보정
+        if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, 1f, NavMesh.AllAreas))
             return hit.position;
 
-        return buildingCenter + randomizedDir.normalized * 0.5f;
+        return buildingCenter;
+    }
+
+    // ==================== 디버그 시각화 ====================
+
+    private Vector3 debugBuildingCenter;
+    private float debugBoxHalfX;
+    private float debugBoxHalfZ;
+
+    private void OnDrawGizmos()
+    {
+        // 작업 중일 때만 표시
+        if (currentBehavior != AIBehaviorState.Working || bb?.CurrentTask == null)
+            return;
+
+        if (bb.CurrentTask.Data.Type != TaskType.Construct)
+            return;
+
+        // 중심점 (흰색)
+        Gizmos.color = Color.white;
+        Gizmos.DrawSphere(debugBuildingCenter, 0.15f);
+
+        // 작업 범위 박스 (검은색)
+        Gizmos.color = Color.black;
+        Vector3 boxSize = new Vector3(debugBoxHalfX * 2, 0.1f, debugBoxHalfZ * 2);
+        Gizmos.DrawWireCube(debugBuildingCenter, boxSize);
+
+        // 할당된 작업 위치 (노란색)
+        if (hasAssignedWorkPosition)
+        {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawSphere(assignedWorkPosition, 0.1f);
+            Gizmos.DrawLine(transform.position, assignedWorkPosition);
+        }
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        // 선택했을 때 추가 정보 표시
+        if (bb?.CurrentTask == null) return;
+
+        var task = bb.CurrentTask;
+        var building = task.Owner as Building;
+
+        if (building == null) return;
+
+        Vector3 buildingPos = task.Data.TargetPosition;
+        Vector2Int size = building.Data?.Size ?? Vector2Int.one;
+
+        // 건물 실제 영역 (빨간색)
+        Gizmos.color = Color.red;
+        Vector3 buildingBox = new Vector3(size.x, 0.2f, size.y);
+        Gizmos.DrawWireCube(buildingPos, buildingBox);
+
+        // 건물 Transform 위치 (파란색)
+        Gizmos.color = Color.blue;
+        Gizmos.DrawSphere(building.transform.position, 0.12f);
     }
 
     // ==================== 행동 실행 ====================
