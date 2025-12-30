@@ -42,7 +42,7 @@ public class ResourceSpawnSettings
 }
 
 /// <summary>
-/// 맵 생성기 - GridCellVisualizer와 동일한 좌표 계산
+/// �� ������ - GridCellVisualizer�� ������ ��ǥ ���
 /// </summary>
 public class MapGenerator : MonoBehaviour
 {
@@ -51,7 +51,7 @@ public class MapGenerator : MonoBehaviour
     [SerializeField] private GridLineSet gridLineSet;
     [SerializeField] private ResourceNodeDatabaseSO nodeDatabase;
 
-    [Header("Clear Zone (셀 인덱스 기준)")]
+    [Header("Clear Zone (�� �ε��� ����)")]
     [SerializeField] private int clearZoneCellX = 10;
     [SerializeField] private int clearZoneCellZ = 10;
     [SerializeField] private int clearZoneRadius = 3;
@@ -68,8 +68,8 @@ public class MapGenerator : MonoBehaviour
     [SerializeField] private bool showDebugGizmos = true;
     [SerializeField] private bool logGeneration = true;
 
-    // ★ 캐시 (GridCellVisualizer와 동일한 변수명)
-    private Vector3 gridOrigin;      // ★ Grid의 월드 위치
+    // �� ĳ�� (GridCellVisualizer�� ������ ������)
+    private Vector3 gridOrigin;      // �� Grid�� ���� ��ġ
     private Vector2 gridTotalSize;
     private Vector2 cellSize;
     private float offsetX;
@@ -77,7 +77,7 @@ public class MapGenerator : MonoBehaviour
     private int gridCellCountX;
     private int gridCellCountZ;
 
-    // 데이터
+    // ������
     private GridData environmentGridData;
     private List<ResourceNode> spawnedNodes = new List<ResourceNode>();
     private Transform nodesContainer;
@@ -102,11 +102,11 @@ public class MapGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// ★ GridCellVisualizer와 동일하게 설정 캐시
+    /// �� GridCellVisualizer�� �����ϰ� ���� ĳ��
     /// </summary>
     private void CacheGridSettings()
     {
-        // ★★★ Grid의 월드 위치 저장 ★★★
+        // �ڡڡ� Grid�� ���� ��ġ ���� �ڡڡ�
         if (grid != null)
         {
             gridOrigin = grid.transform.position;
@@ -114,10 +114,10 @@ public class MapGenerator : MonoBehaviour
         else
         {
             gridOrigin = Vector3.zero;
-            Debug.LogWarning("[MapGenerator] Grid가 설정되지 않았습니다!");
+            Debug.LogWarning("[MapGenerator] Grid�� �������� �ʾҽ��ϴ�!");
         }
 
-        // GridLineSet에서 크기 정보
+        // GridLineSet���� ũ�� ����
         if (gridLineSet != null)
         {
             gridTotalSize = gridLineSet.gridTotalSize;
@@ -127,18 +127,18 @@ public class MapGenerator : MonoBehaviour
         {
             gridTotalSize = new Vector2(20f, 20f);
             cellSize = new Vector2(1f, 1f);
-            Debug.LogWarning("[MapGenerator] GridLineSet이 설정되지 않았습니다!");
+            Debug.LogWarning("[MapGenerator] GridLineSet�� �������� �ʾҽ��ϴ�!");
         }
 
-        // 셀 개수
+        // �� ����
         gridCellCountX = Mathf.RoundToInt(gridTotalSize.x / cellSize.x);
         gridCellCountZ = Mathf.RoundToInt(gridTotalSize.y / cellSize.y);
 
-        // 오프셋 (그리드 중앙 정렬)
+        // ������ (�׸��� �߾� ����)
         offsetX = -gridTotalSize.x / 2f;
         offsetZ = -gridTotalSize.y / 2f;
 
-        Debug.Log($"[MapGenerator] === 설정 캐시 완료 ===");
+        Debug.Log($"[MapGenerator] === ���� ĳ�� �Ϸ� ===");
         Debug.Log($"  gridOrigin: {gridOrigin}");
         Debug.Log($"  gridTotalSize: {gridTotalSize}");
         Debug.Log($"  cellSize: {cellSize}");
@@ -146,10 +146,10 @@ public class MapGenerator : MonoBehaviour
         Debug.Log($"  offset: ({offsetX}, {offsetZ})");
     }
 
-    // ==================== ★★★ 좌표 계산 (GridCellVisualizer와 100% 동일) ★★★ ====================
+    // ==================== �ڡڡ� ��ǥ ��� (GridCellVisualizer�� 100% ����) �ڡڡ� ====================
 
     /// <summary>
-    /// ★ 셀 코너 좌표 (GridCellVisualizer와 동일)
+    /// �� �� �ڳ� ��ǥ (GridCellVisualizer�� ����)
     /// </summary>
     private Vector3 GetCellCornerPosition(int cellX, int cellZ)
     {
@@ -161,7 +161,7 @@ public class MapGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// ★ 셀 중앙 좌표 (GridCellVisualizer와 동일)
+    /// �� �� �߾� ��ǥ (GridCellVisualizer�� ����)
     /// </summary>
     private Vector3 GetCellCenterPosition(int cellX, int cellZ)
     {
@@ -169,24 +169,24 @@ public class MapGenerator : MonoBehaviour
         return corner + new Vector3(cellSize.x * 0.5f, 0, cellSize.y * 0.5f);
     }
 
-    // ==================== 생성 로직 ====================
+    // ==================== ���� ���� ====================
 
     [ContextMenu("Generate Map")]
     public void GenerateMap()
     {
         if (nodeDatabase == null)
         {
-            Debug.LogError("[MapGenerator] ResourceNodeDatabaseSO가 없습니다!");
+            Debug.LogError("[MapGenerator] ResourceNodeDatabaseSO�� �����ϴ�!");
             return;
         }
 
         if (spawnSettings.Count == 0)
         {
-            Debug.LogError("[MapGenerator] Spawn Settings가 비어있습니다!");
+            Debug.LogError("[MapGenerator] Spawn Settings�� ����ֽ��ϴ�!");
             return;
         }
 
-        // 설정 다시 캐시 (에디터에서 변경됐을 수 있음)
+        // ���� �ٽ� ĳ�� (�����Ϳ��� ������� �� ����)
         CacheGridSettings();
 
         Random.InitState(useRandomSeed ? System.Environment.TickCount : randomSeed);
@@ -201,13 +201,13 @@ public class MapGenerator : MonoBehaviour
             ResourceNodeData nodeData = nodeDatabase.GetNodeByID(settings.NodeID);
             if (nodeData == null)
             {
-                Debug.LogWarning($"[MapGenerator] NodeID {settings.NodeID} 없음: {settings.Name}");
+                Debug.LogWarning($"[MapGenerator] NodeID {settings.NodeID} ����: {settings.Name}");
                 continue;
             }
 
             if (nodeData.Prefab == null)
             {
-                Debug.LogWarning($"[MapGenerator] {nodeData.Name} Prefab 없음!");
+                Debug.LogWarning($"[MapGenerator] {nodeData.Name} Prefab ����!");
                 continue;
             }
 
@@ -215,11 +215,11 @@ public class MapGenerator : MonoBehaviour
             totalSpawned += spawnedCount;
 
             if (logGeneration)
-                Debug.Log($"[MapGenerator] {settings.Name}: {spawnedCount}개 생성");
+                Debug.Log($"[MapGenerator] {settings.Name}: {spawnedCount}�� ����");
         }
 
         if (logGeneration)
-            Debug.Log($"[MapGenerator] 총 {totalSpawned}개 생성 완료");
+            Debug.Log($"[MapGenerator] �� {totalSpawned}�� ���� �Ϸ�");
     }
 
     private int SpawnNodes(ResourceSpawnSettings settings, ResourceNodeData nodeData)
@@ -242,13 +242,13 @@ public class MapGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// ★ 노드 스폰 (셀 중앙에 정확히!)
+    /// �� ��� ���� (�� �߾ӿ� ��Ȯ��!)
     /// </summary>
     private bool TrySpawnNodeAtCell(ResourceNodeData nodeData, int cellX, int cellZ, ResourceSpawnSettings settings)
     {
         Vector2Int size = nodeData.Size;
 
-        // Clear Zone 체크 (모든 셀)
+        // Clear Zone üũ (��� ��)
         for (int x = 0; x < size.x; x++)
         {
             for (int z = 0; z < size.y; z++)
@@ -258,7 +258,7 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
-        // 범위 체크 (모든 셀)
+        // ���� üũ (��� ��)
         for (int x = 0; x < size.x; x++)
         {
             for (int z = 0; z < size.y; z++)
@@ -268,7 +268,7 @@ public class MapGenerator : MonoBehaviour
             }
         }
 
-        // 배치 가능 체크
+        // ��ġ ���� üũ
         Vector3Int gridPos = CellIndexToGridPosition(cellX, cellZ);
 
         if (GridDataManager.Instance != null)
@@ -282,14 +282,14 @@ public class MapGenerator : MonoBehaviour
                 return false;
         }
 
-        // ★★★ 크기에 맞는 중앙 좌표 계산 ★★★
-        // 좌하단 코너 좌표
+        // �ڡڡ� ũ�⿡ �´� �߾� ��ǥ ��� �ڡڡ�
+        // ���ϴ� �ڳ� ��ǥ
         Vector3 corner = GetCellCornerPosition(cellX, cellZ);
 
-        // 크기에 따른 중앙 오프셋
-        // 1x1: (0.5, 0.5) - 1칸 중앙
-        // 2x2: (1.0, 1.0) - 4칸 중앙
-        // 3x3: (1.5, 1.5) - 9칸 중앙
+        // ũ�⿡ ���� �߾� ������
+        // 1x1: (0.5, 0.5) - 1ĭ �߾�
+        // 2x2: (1.0, 1.0) - 4ĭ �߾�
+        // 3x3: (1.5, 1.5) - 9ĭ �߾�
         Vector3 worldPos = corner + new Vector3(
             size.x * cellSize.x * 0.5f,
             0,
@@ -298,35 +298,35 @@ public class MapGenerator : MonoBehaviour
 
         if (logGeneration)
         {
-            Debug.Log($"[MapGenerator] {nodeData.Name} Size({size.x}x{size.y}): Cell({cellX},{cellZ}) → World({worldPos.x:F2}, {worldPos.y:F2}, {worldPos.z:F2})");
+            Debug.Log($"[MapGenerator] {nodeData.Name} Size({size.x}x{size.y}): Cell({cellX},{cellZ}) �� World({worldPos.x:F2}, {worldPos.y:F2}, {worldPos.z:F2})");
         }
 
-        // 스폰
+        // ����
         GameObject nodeObj = Instantiate(nodeData.Prefab, worldPos, Quaternion.identity);
         nodeObj.transform.SetParent(nodesContainer);
         nodeObj.name = $"{nodeData.Name}_{spawnedNodes.Count}";
 
-        // 스케일
+        // ������
         if (settings.ScaleVariation > 0)
         {
             float scale = 1f + Random.Range(-settings.ScaleVariation, settings.ScaleVariation);
             nodeObj.transform.localScale *= scale;
         }
 
-        // 회전
+        // ȸ��
         if (settings.RandomRotation)
         {
             nodeObj.transform.rotation = Quaternion.Euler(0, Random.Range(0f, 360f), 0);
         }
 
-        // ResourceNode 컴포넌트
+        // ResourceNode ������Ʈ
         ResourceNode node = nodeObj.GetComponent<ResourceNode>();
         if (node == null)
             node = nodeObj.AddComponent<ResourceNode>();
 
         node.Initialize(nodeData, gridPos);
 
-        // GridData 등록 (origin 위치는 그대로 좌하단 셀!)
+        // GridData ��� (origin ��ġ�� �״�� ���ϴ� ��!)
         if (GridDataManager.Instance != null)
         {
             GridDataManager.Instance.PlaceObjectAtCell(cellX, cellZ, size, nodeData.ID, PlacedObjectType.ResourceNode, nodeObj);
@@ -339,10 +339,16 @@ public class MapGenerator : MonoBehaviour
         spawnedNodes.Add(node);
         node.OnDepleted += HandleNodeDepleted;
 
+        // ★ TaskManager에 채집 작업 등록
+        if (TaskManager.Instance != null)
+        {
+            TaskManager.Instance.AddHarvestTask(node);
+        }
+
         return true;
     }
 
-    // ==================== 셀 위치 생성 ====================
+    // ==================== �� ��ġ ���� ====================
 
     private List<Vector2Int> GenerateCellPositions(ResourceSpawnSettings settings)
     {
@@ -389,7 +395,7 @@ public class MapGenerator : MonoBehaviour
         int padding = settings.EdgePadding;
         int minDist = Mathf.Max(1, Mathf.CeilToInt(settings.MinDistance));
 
-        // 첫 포인트
+        // ù ����Ʈ
         for (int attempt = 0; attempt < 100 && positions.Count == 0; attempt++)
         {
             int x = Random.Range(padding, gridCellCountX - padding);
@@ -490,7 +496,7 @@ public class MapGenerator : MonoBehaviour
         return positions;
     }
 
-    // ==================== 유틸리티 ====================
+    // ==================== ��ƿ��Ƽ ====================
 
     private Vector3Int CellIndexToGridPosition(int cellX, int cellZ)
     {
@@ -512,7 +518,7 @@ public class MapGenerator : MonoBehaviour
                cellZ >= 0 && cellZ < gridCellCountZ;
     }
 
-    // ==================== 관리 ====================
+    // ==================== ���� ====================
 
     [ContextMenu("Clear Map")]
     public void ClearMap()
@@ -549,14 +555,14 @@ public class MapGenerator : MonoBehaviour
             : environmentGridData;
     }
 
-    // ==================== 디버그 ====================
+    // ==================== ����� ====================
 
     [ContextMenu("Test: Compare with GridCellVisualizer")]
     public void TestCompareCoordinates()
     {
         CacheGridSettings();
 
-        Debug.Log("=== MapGenerator vs GridCellVisualizer 비교 ===");
+        Debug.Log("=== MapGenerator vs GridCellVisualizer �� ===");
         Debug.Log($"gridOrigin: {gridOrigin}");
         Debug.Log($"offsetX: {offsetX}, offsetZ: {offsetZ}");
         Debug.Log($"cellSize: {cellSize}");
@@ -572,7 +578,7 @@ public class MapGenerator : MonoBehaviour
         {
             Vector3 corner = GetCellCornerPosition(cell[0], cell[1]);
             Vector3 center = GetCellCenterPosition(cell[0], cell[1]);
-            Debug.Log($"Cell({cell[0]},{cell[1]}) → Corner:{corner}, Center:{center}");
+            Debug.Log($"Cell({cell[0]},{cell[1]}) �� Corner:{corner}, Center:{center}");
         }
     }
 
@@ -580,7 +586,7 @@ public class MapGenerator : MonoBehaviour
     {
         if (!showDebugGizmos || gridLineSet == null) return;
 
-        // 전체 경계
+        // ��ü ���
         Gizmos.color = Color.yellow;
         Vector3 center = grid != null ? grid.transform.position : Vector3.zero;
         Gizmos.DrawWireCube(center, new Vector3(gridTotalSize.x, 0.1f, gridTotalSize.y));

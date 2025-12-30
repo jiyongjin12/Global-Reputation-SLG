@@ -98,7 +98,7 @@ public class ResourceNode : MonoBehaviour
     }
 
     /// <summary>
-    /// 드롭 아이템 생성
+    /// ★ 드롭 아이템 생성 + 튀어나오는 애니메이션
     /// </summary>
     private List<DroppedItem> SpawnDrops()
     {
@@ -110,16 +110,12 @@ public class ResourceNode : MonoBehaviour
 
             for (int i = 0; i < amount; i++)
             {
-                // 약간의 랜덤 오프셋으로 드롭
-                Vector3 dropPos = transform.position + new Vector3(
-                    UnityEngine.Random.Range(-0.5f, 0.5f),
-                    0.1f,
-                    UnityEngine.Random.Range(-0.5f, 0.5f)
-                );
-
                 if (drop.Resource.DropPrefab != null)
                 {
-                    GameObject dropObj = Instantiate(drop.Resource.DropPrefab, dropPos, Quaternion.identity);
+                    // 스폰 위치는 자원 중심
+                    Vector3 spawnPos = transform.position + Vector3.up * 0.5f;
+
+                    GameObject dropObj = Instantiate(drop.Resource.DropPrefab, spawnPos, Quaternion.identity);
                     DroppedItem droppedItem = dropObj.GetComponent<DroppedItem>();
 
                     if (droppedItem == null)
@@ -129,6 +125,15 @@ public class ResourceNode : MonoBehaviour
 
                     droppedItem.Initialize(drop.Resource, 1);
                     droppedItems.Add(droppedItem);
+
+                    // ★ 튀어나오는 애니메이션 시작!
+                    droppedItem.PlayDropAnimation(spawnPos);
+
+                    // TaskManager에 줍기 작업 등록 (자동 흡수 안 되면 수동으로 주움)
+                    if (TaskManager.Instance != null)
+                    {
+                        TaskManager.Instance.AddPickupItemTask(droppedItem);
+                    }
                 }
             }
         }
@@ -157,6 +162,12 @@ public class ResourceNode : MonoBehaviour
         foreach (var renderer in GetComponentsInChildren<Renderer>())
         {
             renderer.enabled = true;
+        }
+
+        // ★ TaskManager에 다시 채집 작업 등록
+        if (TaskManager.Instance != null)
+        {
+            TaskManager.Instance.AddHarvestTask(this);
         }
 
         Debug.Log($"[ResourceNode] {data.Name} respawned");

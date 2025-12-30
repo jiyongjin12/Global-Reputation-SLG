@@ -5,32 +5,59 @@ public enum AIBehaviorState
 {
     Idle,
     Wandering,
-    SeekingFood,
-    Eating,
-    Working,
-    ExecutingCommand,
-    Fleeing
+    SeekingFood,      // 생존
+    Resting,          // 생존
+    Working,          // 건축/채집
+    PickingUpItem,    // 아이템 줍기
+    DeliveringToStorage,
+    ExecutingCommand  // 플레이어 명령
 }
 
 /// <summary>
-/// 유닛 AI (Mind) - Pull 방식 작업 수행
-/// 우선순위: 생존 > 플레이어 명령 > 자동 작업 > 자유 행동
+/// 작업 우선순위 등급
+/// 숫자가 낮을수록 높은 우선순위
+/// </summary>
+public enum TaskPriorityLevel
+{
+    PlayerCommand = 0,  // 1순위: 무조건 인터럽트
+    Survival = 1,       // 2순위: 플레이어 제외 인터럽트
+    Construction = 2,   // 3순위: 플레이어/생존 제외 인터럽트
+    ItemPickup = 3,     // 4순위: 현재 일 끝내고 이동
+    Harvest = 4,        // 5순위: 현재 일 끝내고 이동
+    FreeWill = 5        // 6순위: 대기, 언제든 인터럽트 가능
+}
+
+/// <summary>
+/// 유닛 AI - 우선순위별 인터럽트 시스템
+/// 
+/// 인터럽트 규칙:
+/// - 플레이어(1순위): 어떤 일을 하던 중단하고 이동
+/// - 생존(2순위): 플레이어 제외 중단하고 이동
+/// - 건축(3순위): 플레이어/생존 제외 중단하고 이동
+/// - 아이템/채집(4~5순위): 현재 일 끝내고 이동
+/// - 자유행동(6순위): 대기, 언제든 인터럽트 가능
 /// </summary>
 public class UnitAI : MonoBehaviour
 {
-    [Header("Settings")]
+    [Header("=== 기본 설정 ===")]
     [SerializeField] private float decisionInterval = 0.5f;
-    [SerializeField] private float hungerDecreasePerMinute = 3f;
-    [SerializeField] private float foodSearchRadius = 20f;
     [SerializeField] private float workRadius = 2f;
     [SerializeField] private float wanderRadius = 10f;
 
-    [Header("Thresholds")]
+    [Header("=== 배고픔 설정 ===")]
+    [SerializeField] private float hungerDecreasePerMinute = 3f;
+    [SerializeField] private float foodSearchRadius = 20f;
     [SerializeField] private float hungerSeekThreshold = 50f;
     [SerializeField] private float hungerCriticalThreshold = 20f;
 
-    [Header("Debug")]
+    [Header("=== 아이템 줍기 설정 ===")]
+    [Tooltip("아이템을 줍는데 걸리는 시간 (초)")]
+    [SerializeField] private float itemPickupDuration = 1f;
+    [SerializeField] private float pickupRadius = 1.5f;
+
+    [Header("=== 디버그 ===")]
     [SerializeField] private AIBehaviorState currentBehavior = AIBehaviorState.Idle;
+    [SerializeField] private TaskPriorityLevel currentPriority = TaskPriorityLevel.FreeWill;
 
     private Unit unit;
     private UnitBlackboard bb;
@@ -38,11 +65,23 @@ public class UnitAI : MonoBehaviour
 
     private float lastDecisionTime;
     private float workTimer;
+    private float pickupTimer; // 아이템 줍기 타이머
+
+    // 창고 배달 후 복귀
+    private PostedTask previousTask;
+    private bool returningFromDelivery = false;
+
+    // 건물 작업 분산 위치
+    private Vector3 assignedWorkPosition;
+    private bool hasAssignedWorkPosition = false;
+
+    // ★ 대기 중인 작업 (현재 작업 완료 후 이동)
+    private PostedTask pendingTask;
+    private bool hasPendingTask = false;
 
     // Properties
     public AIBehaviorState CurrentBehavior => currentBehavior;
-    public bool HasPlayerCommand => bb?.HasPlayerCommand ?? false;
-    public bool IsBusy => currentBehavior != AIBehaviorState.Idle && currentBehavior != AIBehaviorState.Wandering;
+    public TaskPriorityLevel CurrentPriority => currentPriority;
 
     private void Awake()
     {
@@ -64,7 +103,6 @@ public class UnitAI : MonoBehaviour
         // 배고픔 감소
         bb.DecreaseHunger((hungerDecreasePerMinute / 60f) * Time.deltaTime);
 
-        // 기아 시 체력 감소
         if (bb.IsStarving)
             unit.TakeDamage(Time.deltaTime * 5f);
 
@@ -75,72 +113,308 @@ public class UnitAI : MonoBehaviour
             lastDecisionTime = Time.time;
         }
 
-        // 현재 행동 실행
         ExecuteCurrentBehavior();
     }
 
+    // ==================== 의사결정 ====================
+
+    /// <summary>
+    /// 의사결정 (우선순위별 인터럽트)
+    /// 
+    /// 인터럽트 규칙:
+    /// - 플레이어(1순위): 무조건 중단
+    /// - 생존(2순위): 플레이어 제외 중단
+    /// - 건축(3순위): 플레이어/생존 제외 중단 (채집 중에도!)
+    /// - 아이템/채집(4~5순위): 현재 일 끝내고 이동
+    /// </summary>
     private void MakeDecision()
     {
-        // 1. 생존 (최우선)
-        if (bb.Hunger <= hungerCriticalThreshold)
-        {
-            if (TrySeekFood())
-            {
-                SetBehavior(AIBehaviorState.SeekingFood);
-                return;
-            }
-        }
-
-        // 2. 플레이어 명령
+        // ===== 1순위: 플레이어 명령 (무조건 인터럽트) =====
         if (bb.HasPlayerCommand && bb.PlayerCommand != null)
         {
+            InterruptCurrentTask();
             ExecutePlayerCommand();
             return;
         }
 
-        // 3. 현재 작업 계속
-        if (bb.CurrentTask != null)
+        // ===== 2순위: 생존 (플레이어 제외 인터럽트) =====
+        if (bb.Hunger <= hungerCriticalThreshold)
+        {
+            // 플레이어 명령 중이 아니면 인터럽트 가능
+            if (currentPriority != TaskPriorityLevel.PlayerCommand)
+            {
+                if (TrySeekFood())
+                {
+                    InterruptCurrentTask();
+                    SetBehaviorAndPriority(AIBehaviorState.SeekingFood, TaskPriorityLevel.Survival);
+                    return;
+                }
+            }
+        }
+
+        // ===== 3순위: 건설 (채집/아이템/자유행동 중이면 인터럽트) =====
+        // 이미 건설 작업 중이면 스킵
+        if (currentPriority != TaskPriorityLevel.Construction)
+        {
+            // 플레이어/생존 중이 아니면
+            if (currentPriority > TaskPriorityLevel.Survival)
+            {
+                int constructCount = TaskManager.Instance?.GetAvailableTaskCount(TaskType.Construct) ?? 0;
+
+                if (constructCount > 0)
+                {
+                    Debug.Log($"[UnitAI] {unit.UnitName}: 건설 작업 {constructCount}개 발견! 현재 상태: {currentBehavior}, 우선순위: {currentPriority}");
+                    InterruptCurrentTask();
+
+                    if (TryPullTask())
+                    {
+                        Debug.Log($"[UnitAI] {unit.UnitName}: 작업 할당 성공! → {bb.CurrentTask?.Data.Type}");
+                        return;
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[UnitAI] {unit.UnitName}: 작업 할당 실패!");
+                    }
+                }
+                else
+                {
+                    // 건설 작업이 0인 이유 확인
+                    TaskManager.Instance?.DebugPrintConstructionStatus();
+                }
+            }
+        }
+
+        // ===== 여기서부터는 인터럽트 불가 (현재 작업 계속) =====
+
+        // 배달 중이면 계속
+        if (currentBehavior == AIBehaviorState.DeliveringToStorage)
             return;
 
-        // 4. 자동 작업 (Pull)
-        if (bb.IsIdle)
+        // 채집/아이템 줍기 중이면 계속 (나무/아이템 완료 후 다음 작업)
+        if (bb.CurrentTask != null &&
+            (currentBehavior == AIBehaviorState.Working || currentBehavior == AIBehaviorState.PickingUpItem))
+            return;
+
+        // 인벤토리 가득 차면 창고로
+        if (unit.Inventory.IsFull)
         {
-            // 배고프면 음식 먼저
+            StartDeliveryToStorage();
+            return;
+        }
+
+        // ===== 대기 중인 작업 처리 =====
+        if (hasPendingTask && pendingTask != null)
+        {
+            AssignTask(pendingTask);
+            hasPendingTask = false;
+            pendingTask = null;
+            return;
+        }
+
+        // ===== Idle 상태: 새 작업 찾기 =====
+        if (bb.IsIdle || currentBehavior == AIBehaviorState.Idle || currentBehavior == AIBehaviorState.Wandering)
+        {
+            // 배고프면 음식 먼저 (비 크리티컬)
             if (bb.Hunger <= hungerSeekThreshold && TrySeekFood())
             {
-                SetBehavior(AIBehaviorState.SeekingFood);
+                SetBehaviorAndPriority(AIBehaviorState.SeekingFood, TaskPriorityLevel.Survival);
                 return;
             }
 
-            // TaskManager에서 Pull
+            // TaskManager에서 Pull (건설 > 아이템 > 채집 순)
             if (TryPullTask())
-            {
-                SetBehavior(AIBehaviorState.Working);
                 return;
-            }
 
-            // 5. 자유 행동
+            // 자유 행동
             PerformFreeWill();
         }
     }
+
+    // ==================== 인터럽트 시스템 ====================
+
+    /// <summary>
+    /// 새 우선순위가 현재 작업을 인터럽트할 수 있는지 체크
+    /// </summary>
+    private bool CanInterrupt(TaskPriorityLevel newPriority)
+    {
+        // 자유행동은 언제든 인터럽트 가능
+        if (currentPriority == TaskPriorityLevel.FreeWill)
+            return true;
+
+        // 플레이어 명령: 무조건 인터럽트
+        if (newPriority == TaskPriorityLevel.PlayerCommand)
+            return true;
+
+        // 생존: 플레이어 제외 인터럽트
+        if (newPriority == TaskPriorityLevel.Survival)
+            return currentPriority > TaskPriorityLevel.PlayerCommand;
+
+        // 건축: 플레이어/생존 제외 인터럽트
+        if (newPriority == TaskPriorityLevel.Construction)
+            return currentPriority > TaskPriorityLevel.Survival;
+
+        // 아이템/채집: 인터럽트 불가 (대기열에 추가)
+        return false;
+    }
+
+    /// <summary>
+    /// 현재 작업 인터럽트 (즉시 중단)
+    /// </summary>
+    private void InterruptCurrentTask()
+    {
+        if (bb.CurrentTask != null)
+        {
+            TaskManager.Instance?.LeaveTask(bb.CurrentTask, unit);
+            bb.CurrentTask = null;
+        }
+
+        bb.TargetObject = null;
+        bb.TargetPosition = null;
+        hasAssignedWorkPosition = false;
+        previousTask = null;
+        returningFromDelivery = false;
+        hasPendingTask = false;
+        pendingTask = null;
+        workTimer = 0f;
+        pickupTimer = 0f;
+    }
+
+    /// <summary>
+    /// 대기열에 작업 추가 (현재 작업 완료 후 수행)
+    /// </summary>
+    private void SetPendingTask(PostedTask task)
+    {
+        pendingTask = task;
+        hasPendingTask = true;
+    }
+
+    // ==================== 작업 Pull ====================
 
     private bool TryPullTask()
     {
         if (TaskManager.Instance == null) return false;
 
+        // 배달 후 복귀
+        if (returningFromDelivery && previousTask != null)
+        {
+            if (previousTask.State != PostedTaskState.Completed &&
+                previousTask.State != PostedTaskState.Cancelled)
+            {
+                if (TaskManager.Instance.TakeTask(previousTask, unit))
+                {
+                    AssignTask(previousTask);
+                    previousTask = null;
+                    returningFromDelivery = false;
+                    return true;
+                }
+            }
+            previousTask = null;
+            returningFromDelivery = false;
+        }
+
+        // 새 작업 찾기
         var task = TaskManager.Instance.FindNearestTask(unit);
         if (task != null && TaskManager.Instance.TakeTask(task, unit))
         {
-            bb.CurrentTask = task;
-            bb.TargetPosition = task.Data.TargetPosition;
-            bb.TargetObject = task.Data.TargetObject;
-            unit.MoveTo(task.Data.TargetPosition);
-
-            Debug.Log($"[UnitAI] {unit.UnitName}: 작업 수락 - {task.Data.Type}");
+            AssignTask(task);
             return true;
         }
         return false;
     }
+
+    /// <summary>
+    /// 작업 할당
+    /// </summary>
+    private void AssignTask(PostedTask task)
+    {
+        bb.CurrentTask = task;
+        bb.TargetObject = task.Data.TargetObject;
+        hasAssignedWorkPosition = false;
+        workTimer = 0f;
+        pickupTimer = 0f;
+
+        switch (task.Data.Type)
+        {
+            case TaskType.Construct:
+                // 건물 작업: 분산 위치 계산
+                assignedWorkPosition = CalculateDistributedWorkPosition(task);
+                hasAssignedWorkPosition = true;
+                bb.TargetPosition = assignedWorkPosition;
+                unit.MoveTo(assignedWorkPosition);
+                SetBehaviorAndPriority(AIBehaviorState.Working, TaskPriorityLevel.Construction);
+                break;
+
+            case TaskType.PickupItem:
+                bb.TargetPosition = task.Data.TargetPosition;
+                unit.MoveTo(task.Data.TargetPosition);
+                SetBehaviorAndPriority(AIBehaviorState.PickingUpItem, TaskPriorityLevel.ItemPickup);
+                break;
+
+            case TaskType.Harvest:
+                bb.TargetPosition = task.Data.TargetPosition;
+                unit.MoveTo(task.Data.TargetPosition);
+                SetBehaviorAndPriority(AIBehaviorState.Working, TaskPriorityLevel.Harvest);
+                break;
+
+            default:
+                bb.TargetPosition = task.Data.TargetPosition;
+                unit.MoveTo(task.Data.TargetPosition);
+                SetBehaviorAndPriority(AIBehaviorState.Working, TaskPriorityLevel.FreeWill);
+                break;
+        }
+
+        Debug.Log($"[UnitAI] {unit.UnitName}: 작업 시작 - {task.Data.Type} (우선순위: {currentPriority})");
+    }
+
+    // ==================== 건물 분산 위치 ====================
+
+    private Vector3 CalculateDistributedWorkPosition(PostedTask task)
+    {
+        Vector3 buildingCenter = task.Data.TargetPosition;
+        Vector2Int buildingSize = Vector2Int.one;
+
+        var building = task.Owner as Building;
+        if (building?.Data != null)
+            buildingSize = building.Data.Size;
+
+        float halfX = buildingSize.x * 0.5f;
+        float halfZ = buildingSize.y * 0.5f;
+        float workDistance = Mathf.Max(halfX, halfZ) + 0.5f;
+
+        int workerIndex = 0;
+        if (task.AssignedUnits != null)
+        {
+            workerIndex = task.AssignedUnits.IndexOf(unit);
+            if (workerIndex < 0) workerIndex = task.AssignedUnits.Count;
+        }
+
+        Vector3[] directions = new Vector3[]
+        {
+            new Vector3(0, 0, 1), new Vector3(0, 0, -1),
+            new Vector3(-1, 0, 0), new Vector3(1, 0, 0),
+            new Vector3(-0.7f, 0, 0.7f), new Vector3(0.7f, 0, 0.7f),
+            new Vector3(-0.7f, 0, -0.7f), new Vector3(0.7f, 0, -0.7f),
+        };
+
+        int dirIndex = workerIndex % directions.Length;
+        Vector3 baseDirection = directions[dirIndex];
+
+        float randomAngle = Random.Range(-30f, 30f) * Mathf.Deg2Rad;
+        Vector3 randomizedDir = new Vector3(
+            baseDirection.x * Mathf.Cos(randomAngle) - baseDirection.z * Mathf.Sin(randomAngle),
+            0,
+            baseDirection.x * Mathf.Sin(randomAngle) + baseDirection.z * Mathf.Cos(randomAngle)
+        );
+
+        Vector3 targetPos = buildingCenter + randomizedDir.normalized * workDistance;
+
+        if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, 2f, NavMesh.AllAreas))
+            return hit.position;
+
+        return buildingCenter + randomizedDir.normalized * 0.5f;
+    }
+
+    // ==================== 행동 실행 ====================
 
     private void ExecuteCurrentBehavior()
     {
@@ -151,6 +425,12 @@ public class UnitAI : MonoBehaviour
                 break;
             case AIBehaviorState.Working:
                 UpdateWorking();
+                break;
+            case AIBehaviorState.PickingUpItem:
+                UpdatePickingUpItem();
+                break;
+            case AIBehaviorState.DeliveringToStorage:
+                UpdateDelivery();
                 break;
             case AIBehaviorState.ExecutingCommand:
                 UpdatePlayerCommand();
@@ -180,7 +460,7 @@ public class UnitAI : MonoBehaviour
     {
         if (bb.NearestFood == null)
         {
-            SetBehavior(AIBehaviorState.Idle);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
             return;
         }
 
@@ -195,7 +475,7 @@ public class UnitAI : MonoBehaviour
                 food.PickUp(unit);
             }
             bb.NearestFood = null;
-            SetBehavior(AIBehaviorState.Idle);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
         }
     }
 
@@ -220,23 +500,24 @@ public class UnitAI : MonoBehaviour
         return nearest;
     }
 
-    // ==================== 작업 ====================
+    // ==================== 작업 (건축/채집) ====================
 
     private void UpdateWorking()
     {
         if (bb.CurrentTask == null)
         {
-            SetBehavior(AIBehaviorState.Idle);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
             return;
         }
 
         var task = bb.CurrentTask;
-        float dist = Vector3.Distance(transform.position, task.Data.TargetPosition);
+        Vector3 targetPos = hasAssignedWorkPosition ? assignedWorkPosition : task.Data.TargetPosition;
+        float dist = Vector3.Distance(transform.position, targetPos);
 
         if (dist > workRadius)
         {
             if (unit.HasArrivedAtDestination())
-                unit.MoveTo(task.Data.TargetPosition);
+                unit.MoveTo(targetPos);
             return;
         }
 
@@ -254,40 +535,151 @@ public class UnitAI : MonoBehaviour
         switch (task.Data.Type)
         {
             case TaskType.Construct:
-                var building = task.Owner as Building;
-                if (building == null || building.CurrentState == BuildingState.Completed)
-                {
-                    CompleteCurrentTask();
-                    return;
-                }
-                float work = unit.DoWork();
-                if (building.DoConstructionWork(work))
-                {
-                    TaskManager.Instance?.CompleteTask(task);
-                    CompleteCurrentTask();
-                }
+                PerformConstruction(task);
                 break;
-
             case TaskType.Harvest:
-                var node = task.Owner as ResourceNode;
-                if (node == null || node.IsDepleted)
-                {
-                    CompleteCurrentTask();
-                    return;
-                }
-                float gather = unit.DoGather(node.Data?.NodeType);
-                var drops = node.Harvest(gather);
-                foreach (var drop in drops)
-                {
-                    if (!unit.Inventory.IsFull)
-                    {
-                        unit.Inventory.AddItem(drop.Resource, drop.Amount);
-                        Destroy(drop.gameObject);
-                    }
-                }
-                if (node.IsDepleted || unit.Inventory.IsFull)
-                    CompleteCurrentTask();
+                PerformHarvest(task);
                 break;
+        }
+    }
+
+    private void PerformConstruction(PostedTask task)
+    {
+        var building = task.Owner as Building;
+        if (building == null || building.CurrentState == BuildingState.Completed)
+        {
+            CompleteCurrentTask();
+            return;
+        }
+
+        float work = unit.DoWork();
+        if (building.DoConstructionWork(work))
+        {
+            TaskManager.Instance?.CompleteTask(task);
+            CompleteCurrentTask();
+        }
+    }
+
+    private void PerformHarvest(PostedTask task)
+    {
+        var node = task.Owner as ResourceNode;
+        if (node == null || node.IsDepleted)
+        {
+            CompleteCurrentTask();
+            return;
+        }
+
+        if (unit.Inventory.IsFull)
+        {
+            previousTask = task;
+            TaskManager.Instance?.LeaveTask(task, unit);
+            bb.CurrentTask = null;
+            StartDeliveryToStorage();
+            return;
+        }
+
+        float gather = unit.DoGather(node.Data?.NodeType);
+        node.Harvest(gather);
+
+        if (node.IsDepleted)
+        {
+            CompleteCurrentTask();
+        }
+        else if (unit.Inventory.IsFull)
+        {
+            previousTask = task;
+            TaskManager.Instance?.LeaveTask(task, unit);
+            bb.CurrentTask = null;
+            StartDeliveryToStorage();
+        }
+    }
+
+    // ==================== 아이템 줍기 (시간 소요) ====================
+
+    private void UpdatePickingUpItem()
+    {
+        if (bb.CurrentTask == null)
+        {
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+            return;
+        }
+
+        var task = bb.CurrentTask;
+        var item = task.Owner as DroppedItem;
+
+        // 아이템이 사라졌으면 (다른 유닛이 주움)
+        if (item == null)
+        {
+            CompleteCurrentTask();
+            return;
+        }
+
+        float dist = Vector3.Distance(transform.position, item.transform.position);
+
+        // 아이템 위치로 이동
+        if (dist > pickupRadius)
+        {
+            if (unit.HasArrivedAtDestination())
+                unit.MoveTo(item.transform.position);
+            pickupTimer = 0f; // 이동 중이면 타이머 리셋
+            return;
+        }
+
+        // ★ 아이템 줍기 (시간 소요)
+        pickupTimer += Time.deltaTime;
+
+        if (pickupTimer >= itemPickupDuration)
+        {
+            // 줍기 완료!
+            if (!unit.Inventory.IsFull && item != null)
+            {
+                unit.Inventory.AddItem(item.Resource, item.Amount);
+                item.PickUp(unit);
+                Debug.Log($"[UnitAI] {unit.UnitName}: {item.Resource?.ResourceName} 줍기 완료! ({itemPickupDuration}초)");
+            }
+            CompleteCurrentTask();
+        }
+    }
+
+    // ==================== 창고 배달 ====================
+
+    private void StartDeliveryToStorage()
+    {
+        var storagePos = TaskManager.Instance?.GetStoragePosition();
+
+        if (storagePos == null)
+        {
+            unit.Inventory.DepositToStorage();
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+            return;
+        }
+
+        bb.TargetPosition = storagePos.Value;
+        unit.MoveTo(storagePos.Value);
+        SetBehaviorAndPriority(AIBehaviorState.DeliveringToStorage, TaskPriorityLevel.ItemPickup);
+    }
+
+    private void UpdateDelivery()
+    {
+        if (!bb.TargetPosition.HasValue)
+        {
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+            return;
+        }
+
+        float dist = Vector3.Distance(transform.position, bb.TargetPosition.Value);
+
+        if (dist < 2f || unit.HasArrivedAtDestination())
+        {
+            unit.Inventory.DepositToStorage();
+
+            if (previousTask != null)
+            {
+                returningFromDelivery = true;
+            }
+
+            bb.TargetPosition = null;
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
         }
     }
 
@@ -299,7 +691,10 @@ public class UnitAI : MonoBehaviour
         bb.CurrentTask = null;
         bb.TargetObject = null;
         bb.TargetPosition = null;
-        SetBehavior(AIBehaviorState.Idle);
+        hasAssignedWorkPosition = false;
+        workTimer = 0f;
+        pickupTimer = 0f;
+        SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
     }
 
     // ==================== 플레이어 명령 ====================
@@ -309,12 +704,8 @@ public class UnitAI : MonoBehaviour
         bb.HasPlayerCommand = true;
         bb.PlayerCommand = command;
 
-        if (bb.CurrentTask != null)
-        {
-            TaskManager.Instance?.LeaveTask(bb.CurrentTask, unit);
-            bb.CurrentTask = null;
-        }
-
+        // 즉시 인터럽트
+        InterruptCurrentTask();
         ExecutePlayerCommand();
     }
 
@@ -323,7 +714,7 @@ public class UnitAI : MonoBehaviour
         var cmd = bb.PlayerCommand;
         if (cmd == null) return;
 
-        SetBehavior(AIBehaviorState.ExecutingCommand);
+        SetBehaviorAndPriority(AIBehaviorState.ExecutingCommand, TaskPriorityLevel.PlayerCommand);
 
         switch (cmd.Type)
         {
@@ -342,14 +733,14 @@ public class UnitAI : MonoBehaviour
     {
         if (!bb.HasPlayerCommand || bb.PlayerCommand == null)
         {
-            SetBehavior(AIBehaviorState.Idle);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
             return;
         }
 
         if (bb.PlayerCommand.Type == UnitCommandType.MoveTo && unit.HasArrivedAtDestination())
         {
             ClearPlayerCommand();
-            SetBehavior(AIBehaviorState.Idle);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
         }
     }
 
@@ -366,7 +757,7 @@ public class UnitAI : MonoBehaviour
         if (Random.value < 0.5f)
             StartWandering();
         else
-            SetBehavior(AIBehaviorState.Idle);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
     }
 
     private void StartWandering()
@@ -377,26 +768,30 @@ public class UnitAI : MonoBehaviour
         if (NavMesh.SamplePosition(randomPoint, out var hit, wanderRadius, NavMesh.AllAreas))
         {
             unit.MoveTo(hit.position);
-            SetBehavior(AIBehaviorState.Wandering);
+            SetBehaviorAndPriority(AIBehaviorState.Wandering, TaskPriorityLevel.FreeWill);
         }
     }
 
     private void UpdateWandering()
     {
         if (unit.HasArrivedAtDestination())
-            SetBehavior(AIBehaviorState.Idle);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
     }
 
     // ==================== 유틸리티 ====================
 
-    private void SetBehavior(AIBehaviorState newBehavior)
+    private void SetBehaviorAndPriority(AIBehaviorState behavior, TaskPriorityLevel priority)
     {
-        currentBehavior = newBehavior;
-        bb?.SetState(newBehavior switch
+        currentBehavior = behavior;
+        currentPriority = priority;
+
+        bb?.SetState(behavior switch
         {
             AIBehaviorState.Idle => UnitState.Idle,
             AIBehaviorState.Working => UnitState.Working,
-            AIBehaviorState.SeekingFood or AIBehaviorState.Eating => UnitState.Eating,
+            AIBehaviorState.PickingUpItem => UnitState.Working,
+            AIBehaviorState.DeliveringToStorage => UnitState.Moving,
+            AIBehaviorState.SeekingFood or AIBehaviorState.Resting => UnitState.Eating,
             AIBehaviorState.Wandering or AIBehaviorState.ExecutingCommand => UnitState.Moving,
             _ => UnitState.Idle
         });
@@ -404,7 +799,7 @@ public class UnitAI : MonoBehaviour
 
     private void OnHungerCritical()
     {
-        Debug.Log($"[UnitAI] {unit.UnitName}: 배고픔!");
+        Debug.Log($"[UnitAI] {unit.UnitName}: 배고픔 위험!");
     }
 
     // 호환성

@@ -62,6 +62,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8136991851921830065}
+  - component: {fileID: 7886977164029348902}
   m_Layer: 0
   m_Name: Wood
   m_TagString: Untagged
@@ -78,7 +79,7 @@ Transform:
   m_GameObject: {fileID: 5705030408001920902}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.87206, y: 0.184, z: -2.44287}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -86,6 +87,37 @@ Transform:
   - {fileID: 2648275026888671225}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &7886977164029348902
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5705030408001920902}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c477a3c745cc2643b9bb1a22ae66862, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  resource: {fileID: 11400000, guid: 7697bfbb38c55c64fbefa1841da44f9a, type: 2}
+  amount: 1
+  launchForce: 0.7
+  launchHeight: 5
+  gravity: 15
+  bounceDecay: 0.5
+  maxBounces: 2
+  groundY: 0.1
+  minBounceVelocity: 0.2
+  spawnScaleDuration: 0.15
+  maxSquashAmount: 0.5
+  enableMagnet: 0
+  magnetRadius: 3
+  windupBackDistance: 0.5
+  windupUpDistance: 0.5
+  windupDuration: 0.15
+  magnetPullDuration: 0.25
+  isAnimating: 1
+  isBeingMagneted: 0
 --- !u!1 &7438499777957745389
 GameObject:
   m_ObjectHideFlags: 0
