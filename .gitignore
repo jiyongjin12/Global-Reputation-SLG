@@ -97,3 +97,7 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# API 키가 들어있는 스크립터블 오브젝트 제외
+Assets/_API_Key/AI_API.asset
+Assets/_API_Key/AI_API.asset.meta

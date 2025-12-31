@@ -100,7 +100,7 @@ public class Building : MonoBehaviour
         }
 
         OnConstructionComplete?.Invoke(this);
-        Debug.Log($"[Building] {data?.Name}");
+        Debug.Log($"[Building] {data?.Name}!");
     }
 
     private void SetState(BuildingState newState) => currentState = newState;
