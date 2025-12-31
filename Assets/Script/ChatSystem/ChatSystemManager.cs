@@ -7,49 +7,52 @@ public class ChatSystemManager : MonoBehaviour
 {
     [Header("UI References")]
     public TMP_InputField chatInput;
-    public RectTransform chatContent;
-    public GameObject messagePrefab;
-    public ScrollRect scrollRect;
+    public Button sendButton;        // 전송(엔터) 버튼
+    public RectTransform chatContent; // ScrollView -> Viewport -> Content
+    public ScrollRect scrollRect;    // 자동 스크롤용
+    public GameObject messagePrefab; // ChatUIItem 스크립트가 붙은 프리팹
 
     [Header("AI Engine")]
-    public AIChatSystem aiSystem;
+    public AIChatSystem aiSystem;    // AIChatSystem 연결
 
     void Start()
     {
-        chatInput.onEndEdit.AddListener(OnInputSubmit);
+        // 1. 엔터키 입력 이벤트 연결
+        chatInput.onEndEdit.AddListener((text) => {
+            if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) OnSend();
+        });
+
+        // 2. 전송 버튼 클릭 이벤트 연결
+        sendButton.onClick.AddListener(OnSend);
     }
 
-    private void OnInputSubmit(string text)
+    public void OnSend()
     {
-        if (!Input.GetKeyDown(KeyCode.Return) && !Input.GetKeyDown(KeyCode.KeypadEnter)) return;
+        string text = chatInput.text;
         if (string.IsNullOrWhiteSpace(text)) return;
 
+        // 비동기로 메시지 처리 프로세스 시작
         ProcessAndSendMessage(text).Forget();
+
+        // 입력창 초기화 및 다시 포커스
         chatInput.text = "";
         chatInput.ActivateInputField();
     }
 
     private async UniTaskVoid ProcessAndSendMessage(string rawText)
     {
-        // AI 분석 실행 (번역 + 독성 검사)
-        ChatMessage data = await aiSystem.ProcessChatMessage("Player", rawText);
+        // [1단계] 독성 검사만 먼저 수행 (번역보다 훨씬 빠름)
+        float toxicityScore = await aiSystem.CheckToxicity(rawText);
+        bool isFiltered = toxicityScore > 0.5f;
 
-        string displayOriginal = data.RawContent;
-        string displayTranslated = data.TranslatedContent;
-
-        // 기획서 5페이지 연동: 독성 수치에 따른 검열 처리
-        if (data.IsFiltered)
-        {
-            displayTranslated = "<color=red><b>[부적절한 내용으로 검열됨]</b></color>";
-            // 여기서 ReputationSystem.Instance.AddScore(-10) 등을 호출하여 평판에 반영 가능
-        }
-
-        // 메시지 UI 생성 및 데이터 할당
+        // [2단계] 메시지 객체 생성 (번역은 아직 하지 않은 상태)
         GameObject newMsgObj = Instantiate(messagePrefab, chatContent);
         var uiItem = newMsgObj.GetComponent<ChatUIItem>();
-        uiItem.SetMessage(data.Sender, displayOriginal, displayTranslated);
 
-        // 레이아웃 갱신 후 하단으로 스크롤
+        // UI 아이템 초기화 (AI 시스템 참조를 넘겨줌)
+        uiItem.Initialize(aiSystem, "Player", rawText, isFiltered);
+
+        // [3단계] 레이아웃 갱신 후 하단으로 자동 스크롤
         await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
         scrollRect.verticalNormalizedPosition = 0f;
     }

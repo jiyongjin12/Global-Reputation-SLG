@@ -215,10 +215,10 @@ public class TaskManager : MonoBehaviour
 
         if (showDebugLogs)
         {
-            Debug.Log($"[TaskManager] {unit.UnitName} FindNearestTask:");
-            Debug.Log($"  건설: 미할당={constructUnassigned.Count}, 협력={constructCooperable.Count}");
-            Debug.Log($"  아이템: 미할당={pickupUnassigned.Count}, 협력={pickupCooperable.Count}");
-            Debug.Log($"  채집: 미할당={harvestUnassigned.Count}, 협력={harvestCooperable.Count}");
+            //Debug.Log($"[TaskManager] {unit.UnitName} FindNearestTask:");
+            //Debug.Log($"  건설: 미할당={constructUnassigned.Count}, 협력={constructCooperable.Count}");
+            //Debug.Log($"  아이템: 미할당={pickupUnassigned.Count}, 협력={pickupCooperable.Count}");
+            //Debug.Log($"  채집: 미할당={harvestUnassigned.Count}, 협력={harvestCooperable.Count}");
         }
 
         // 2단계: 우선순위 순서대로 가장 가까운 작업 찾기
@@ -229,14 +229,14 @@ public class TaskManager : MonoBehaviour
         if (result != null)
         {
             if (showDebugLogs)
-                Debug.Log($"[TaskManager] → 건설(미할당) 선택: {result.Data.TargetObject?.name}");
+               // Debug.Log($"[TaskManager] → 건설(미할당) 선택: {result.Data.TargetObject?.name}");
             return result;
         }
         result = FindNearestInList(unit, constructCooperable);
         if (result != null)
         {
             if (showDebugLogs)
-                Debug.Log($"[TaskManager] → 건설(협력) 선택: {result.Data.TargetObject?.name}");
+                //Debug.Log($"[TaskManager] → 건설(협력) 선택: {result.Data.TargetObject?.name}");
             return result;
         }
 
@@ -245,14 +245,14 @@ public class TaskManager : MonoBehaviour
         if (result != null)
         {
             if (showDebugLogs)
-                Debug.Log($"[TaskManager] → 아이템(미할당) 선택");
+                //Debug.Log($"[TaskManager] → 아이템(미할당) 선택");
             return result;
         }
         result = FindNearestInList(unit, pickupCooperable);
         if (result != null)
         {
             if (showDebugLogs)
-                Debug.Log($"[TaskManager] → 아이템(협력) 선택");
+                //Debug.Log($"[TaskManager] → 아이템(협력) 선택");
             return result;
         }
 
@@ -261,14 +261,14 @@ public class TaskManager : MonoBehaviour
         if (result != null)
         {
             if (showDebugLogs)
-                Debug.Log($"[TaskManager] → 채집(미할당) 선택");
+                //Debug.Log($"[TaskManager] → 채집(미할당) 선택");
             return result;
         }
         result = FindNearestInList(unit, harvestCooperable);
         if (result != null)
         {
             if (showDebugLogs)
-                Debug.Log($"[TaskManager] → 채집(협력) 선택");
+                //Debug.Log($"[TaskManager] → 채집(협력) 선택");
             return result;
         }
 
@@ -501,12 +501,12 @@ public class TaskManager : MonoBehaviour
     [ContextMenu("Print Status")]
     public void DebugPrintStatus()
     {
-        Debug.Log($"[TaskManager] === 상태 ===");
-        Debug.Log($"  대기 작업: {postedTasks.Count}");
-        Debug.Log($"    - 건설: {GetAvailableTaskCount(TaskType.Construct)}");
-        Debug.Log($"    - 채집: {GetAvailableTaskCount(TaskType.Harvest)}");
-        Debug.Log($"    - 아이템: {GetAvailableTaskCount(TaskType.PickupItem)}");
-        Debug.Log($"  창고: {storageBuilding?.name ?? "없음"}");
+        //Debug.Log($"[TaskManager] === 상태 ===");
+        //Debug.Log($"  대기 작업: {postedTasks.Count}");
+        //Debug.Log($"    - 건설: {GetAvailableTaskCount(TaskType.Construct)}");
+        //Debug.Log($"    - 채집: {GetAvailableTaskCount(TaskType.Harvest)}");
+        //Debug.Log($"    - 아이템: {GetAvailableTaskCount(TaskType.PickupItem)}");
+        //Debug.Log($"  창고: {storageBuilding?.name ?? "없음"}");
 
         foreach (var task in postedTasks)
         {
@@ -523,17 +523,17 @@ public class TaskManager : MonoBehaviour
 
         if (constructTasks.Count == 0)
         {
-            Debug.Log($"[TaskManager] 건설 작업 없음");
+            //Debug.Log($"[TaskManager] 건설 작업 없음");
             return;
         }
 
         foreach (var task in constructTasks)
         {
-            Debug.Log($"[TaskManager] 건설: {task.Data.TargetObject?.name}");
-            Debug.Log($"  - 상태: {task.State}");
-            Debug.Log($"  - 작업자: {task.CurrentWorkers}/{task.Data.MaxWorkers}");
-            Debug.Log($"  - 할당된 유닛: {string.Join(", ", task.AssignedUnits.Select(u => u.UnitName))}");
-            Debug.Log($"  - 가용: {task.CurrentWorkers < task.Data.MaxWorkers}");
+            //Debug.Log($"[TaskManager] 건설: {task.Data.TargetObject?.name}");
+            //Debug.Log($"  - 상태: {task.State}");
+            //Debug.Log($"  - 작업자: {task.CurrentWorkers}/{task.Data.MaxWorkers}");
+            //Debug.Log($"  - 할당된 유닛: {string.Join(", ", task.AssignedUnits.Select(u => u.UnitName))}");
+            //Debug.Log($"  - 가용: {task.CurrentWorkers < task.Data.MaxWorkers}");
         }
     }
 

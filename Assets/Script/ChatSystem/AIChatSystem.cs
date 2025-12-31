@@ -8,64 +8,86 @@ using System;
 public class AIChatSystem : MonoBehaviour
 {
     [Header("API Configuration")]
-    public APIConfig apiConfig; // .gitignore로 보호된 ScriptableObject 연결
+    public APIConfig apiConfig;
 
     [Header("Settings")]
     public string targetLanguage = "English";
 
-    public async UniTask<ChatMessage> ProcessChatMessage(string sender, string message)
-    {
-        return await ProcessWithGemini(sender, message);
-    }
+    // ★ Flash-Lite = 무료 한도 1,000/일 (가장 높음)
+    // 2025.12 기준 2.5 Flash는 20/일로 줄었음
+    private const string ModelName = "gemini-2.5-flash-lite";
+    private const string ApiVersion = "v1beta";
 
-    private async UniTask<ChatMessage> ProcessWithGemini(string sender, string text)
+    // [1단계: 독성 검사]
+    public async UniTask<float> CheckToxicity(string text)
     {
-        string url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={apiConfig.geminiKey}";
+        // 공식 문서 형식: v1beta/models/{model}:generateContent
+        string url = $"https://generativelanguage.googleapis.com/{ApiVersion}/models/{ModelName}:generateContent";
 
-        // JSON 응답을 강제하고 번역/독성 검사를 동시에 요청하는 프롬프트
-        string prompt = $"Analyze the following text. " +
-                        $"1. Translate it into {targetLanguage}. " +
-                        $"2. Rate its toxicity from 0.0 to 1.0. " +
-                        $"Return ONLY a JSON object exactly in this format: {{\"translation\": \"...\", \"toxicity\": 0.0}}. " +
-                        $"Text: \"{text}\"";
+        string prompt = $"Analyze the toxicity of the following text and return only a float number between 0.0 and 1.0. Text: \"{text}\"";
 
         var payload = new { contents = new[] { new { parts = new[] { new { text = prompt } } } } };
-        string jsonPayload = JsonConvert.SerializeObject(payload);
+        string json = JsonConvert.SerializeObject(payload);
 
-        using var request = new UnityWebRequest(url, "POST");
-        byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonPayload);
-        request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-        request.downloadHandler = new DownloadHandlerBuffer();
-        request.SetRequestHeader("Content-Type", "application/json");
-
+        using var request = CreateRequest(url, json);
         await request.SendWebRequest();
 
         if (request.result == UnityWebRequest.Result.Success)
         {
-            try
+            var response = JsonConvert.DeserializeObject<GeminiResponse>(request.downloadHandler.text);
+            string result = response.candidates[0].content.parts[0].text.Trim();
+
+            if (float.TryParse(result, out float score))
             {
-                string rawJson = JsonConvert.DeserializeObject<GeminiResponse>(request.downloadHandler.text).candidates[0].content.parts[0].text.Trim();
-
-                // 마크다운 형식 제거 (AI가 ```json 식으로 응답할 경우 대비)
-                if (rawJson.StartsWith("```json")) rawJson = rawJson.Replace("```json", "").Replace("```", "");
-
-                var resultData = JsonConvert.DeserializeObject<GeminiResultData>(rawJson);
-
-                return new ChatMessage
-                {
-                    Sender = sender,
-                    RawContent = text,
-                    TranslatedContent = resultData.translation,
-                    ToxicityScore = resultData.toxicity,
-                    IsFiltered = resultData.toxicity > 0.5f
-                };
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[AIChatSystem] Parsing Error: {e.Message}");
+                LogAnalysis(text, score);
+                return score;
             }
         }
-        return new ChatMessage { Sender = sender, RawContent = text, TranslatedContent = "[Error]", ToxicityScore = 0, IsFiltered = false };
+        else
+        {
+            Debug.LogError($"[AIChatSystem] API 에러!\nURL: {url}\n응답: {request.downloadHandler.text}");
+        }
+        return 0f;
+    }
+
+    // [2단계: 번역]
+    public async UniTask<string> TranslateText(string text)
+    {
+        string url = $"https://generativelanguage.googleapis.com/{ApiVersion}/models/{ModelName}:generateContent";
+
+        string prompt = $"Translate the following text into {targetLanguage}. Return ONLY the translated text. Text: \"{text}\"";
+
+        var payload = new { contents = new[] { new { parts = new[] { new { text = prompt } } } } };
+        string json = JsonConvert.SerializeObject(payload);
+
+        using var request = CreateRequest(url, json);
+        await request.SendWebRequest();
+
+        if (request.result == UnityWebRequest.Result.Success)
+        {
+            var response = JsonConvert.DeserializeObject<GeminiResponse>(request.downloadHandler.text);
+            return response.candidates[0].content.parts[0].text.Trim();
+        }
+
+        Debug.LogError($"[AIChatSystem] 번역 에러: {request.downloadHandler.text}");
+        return "[Translation Error]";
+    }
+
+    private UnityWebRequest CreateRequest(string url, string json)
+    {
+        var request = new UnityWebRequest(url, "POST");
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(json);
+        request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+        // ★ 공식 문서 방식: 헤더에 API 키 전달
+        request.SetRequestHeader("x-goog-api-key", apiConfig.geminiKey.Trim());
+        return request;
+    }
+
+    private void LogAnalysis(string rawText, float score)
+    {
+        Debug.Log($"<color=#00FF00>[AI_LOG]</color> Toxicity: {score * 100:F1}% | Text: {rawText}");
     }
 }
 
