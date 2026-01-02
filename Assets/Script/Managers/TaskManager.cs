@@ -91,12 +91,20 @@ public class TaskManager : MonoBehaviour
 
     /// <summary>
     /// 아이템 줍기 작업 등록 (드랍 아이템)
-    /// 애니메이션 중이어도 등록 (실제 줍기 시 체크)
+    /// ★ 공용 아이템만 등록 (개인 소유 아이템은 등록 안 함)
     /// </summary>
     public PostedTask AddPickupItemTask(DroppedItem item)
     {
-        // null 체크만 (IsAvailable은 줍기 시 체크)
+        // null 체크
         if (item == null) return null;
+
+        // ★ 개인 소유 아이템은 등록하지 않음
+        if (!item.IsPublic)
+        {
+            if (showDebugLogs)
+                Debug.Log($"[TaskManager] 개인 소유 아이템 - Task 등록 안함 (Owner: {item.Owner?.UnitName})");
+            return null;
+        }
 
         // 이미 등록된 작업인지 확인
         var existing = postedTasks.FirstOrDefault(t =>
@@ -109,13 +117,15 @@ public class TaskManager : MonoBehaviour
 
         var taskData = new TaskData(TaskType.PickupItem, item.transform.position, item.gameObject)
         {
-            Priority = TaskPriority.Normal, // 채집보다 높은 우선순위
+            Priority = TaskPriority.Normal,
             MaxWorkers = 1,
             WorkRequired = 0f
         };
 
         var posted = PostTask(taskData, item);
         item.OnPickedUp += HandleItemPickedUp;
+
+        Debug.Log($"[TaskManager] 공용 아이템 Task 등록: {item.Resource?.ResourceName}");
 
         return posted;
     }
@@ -215,10 +225,10 @@ public class TaskManager : MonoBehaviour
 
         if (showDebugLogs)
         {
-            //Debug.Log($"[TaskManager] {unit.UnitName} FindNearestTask:");
-            //Debug.Log($"  건설: 미할당={constructUnassigned.Count}, 협력={constructCooperable.Count}");
-            //Debug.Log($"  아이템: 미할당={pickupUnassigned.Count}, 협력={pickupCooperable.Count}");
-            //Debug.Log($"  채집: 미할당={harvestUnassigned.Count}, 협력={harvestCooperable.Count}");
+            Debug.Log($"[TaskManager] {unit.UnitName} FindNearestTask:");
+            Debug.Log($"  건설: 미할당={constructUnassigned.Count}, 협력={constructCooperable.Count}");
+            Debug.Log($"  아이템: 미할당={pickupUnassigned.Count}, 협력={pickupCooperable.Count}");
+            Debug.Log($"  채집: 미할당={harvestUnassigned.Count}, 협력={harvestCooperable.Count}");
         }
 
         // 2단계: 우선순위 순서대로 가장 가까운 작업 찾기
@@ -229,14 +239,14 @@ public class TaskManager : MonoBehaviour
         if (result != null)
         {
             if (showDebugLogs)
-               // Debug.Log($"[TaskManager] → 건설(미할당) 선택: {result.Data.TargetObject?.name}");
+                Debug.Log($"[TaskManager] → 건설(미할당) 선택: {result.Data.TargetObject?.name}");
             return result;
         }
         result = FindNearestInList(unit, constructCooperable);
         if (result != null)
         {
             if (showDebugLogs)
-                //Debug.Log($"[TaskManager] → 건설(협력) 선택: {result.Data.TargetObject?.name}");
+                Debug.Log($"[TaskManager] → 건설(협력) 선택: {result.Data.TargetObject?.name}");
             return result;
         }
 
@@ -245,14 +255,14 @@ public class TaskManager : MonoBehaviour
         if (result != null)
         {
             if (showDebugLogs)
-                //Debug.Log($"[TaskManager] → 아이템(미할당) 선택");
+                Debug.Log($"[TaskManager] → 아이템(미할당) 선택");
             return result;
         }
         result = FindNearestInList(unit, pickupCooperable);
         if (result != null)
         {
             if (showDebugLogs)
-                //Debug.Log($"[TaskManager] → 아이템(협력) 선택");
+                Debug.Log($"[TaskManager] → 아이템(협력) 선택");
             return result;
         }
 
@@ -261,14 +271,14 @@ public class TaskManager : MonoBehaviour
         if (result != null)
         {
             if (showDebugLogs)
-                //Debug.Log($"[TaskManager] → 채집(미할당) 선택");
+                Debug.Log($"[TaskManager] → 채집(미할당) 선택");
             return result;
         }
         result = FindNearestInList(unit, harvestCooperable);
         if (result != null)
         {
             if (showDebugLogs)
-                //Debug.Log($"[TaskManager] → 채집(협력) 선택");
+                Debug.Log($"[TaskManager] → 채집(협력) 선택");
             return result;
         }
 
@@ -501,12 +511,12 @@ public class TaskManager : MonoBehaviour
     [ContextMenu("Print Status")]
     public void DebugPrintStatus()
     {
-        //Debug.Log($"[TaskManager] === 상태 ===");
-        //Debug.Log($"  대기 작업: {postedTasks.Count}");
-        //Debug.Log($"    - 건설: {GetAvailableTaskCount(TaskType.Construct)}");
-        //Debug.Log($"    - 채집: {GetAvailableTaskCount(TaskType.Harvest)}");
-        //Debug.Log($"    - 아이템: {GetAvailableTaskCount(TaskType.PickupItem)}");
-        //Debug.Log($"  창고: {storageBuilding?.name ?? "없음"}");
+        Debug.Log($"[TaskManager] === 상태 ===");
+        Debug.Log($"  대기 작업: {postedTasks.Count}");
+        Debug.Log($"    - 건설: {GetAvailableTaskCount(TaskType.Construct)}");
+        Debug.Log($"    - 채집: {GetAvailableTaskCount(TaskType.Harvest)}");
+        Debug.Log($"    - 아이템: {GetAvailableTaskCount(TaskType.PickupItem)}");
+        Debug.Log($"  창고: {storageBuilding?.name ?? "없음"}");
 
         foreach (var task in postedTasks)
         {
@@ -523,17 +533,17 @@ public class TaskManager : MonoBehaviour
 
         if (constructTasks.Count == 0)
         {
-            //Debug.Log($"[TaskManager] 건설 작업 없음");
+            Debug.Log($"[TaskManager] 건설 작업 없음");
             return;
         }
 
         foreach (var task in constructTasks)
         {
-            //Debug.Log($"[TaskManager] 건설: {task.Data.TargetObject?.name}");
-            //Debug.Log($"  - 상태: {task.State}");
-            //Debug.Log($"  - 작업자: {task.CurrentWorkers}/{task.Data.MaxWorkers}");
-            //Debug.Log($"  - 할당된 유닛: {string.Join(", ", task.AssignedUnits.Select(u => u.UnitName))}");
-            //Debug.Log($"  - 가용: {task.CurrentWorkers < task.Data.MaxWorkers}");
+            Debug.Log($"[TaskManager] 건설: {task.Data.TargetObject?.name}");
+            Debug.Log($"  - 상태: {task.State}");
+            Debug.Log($"  - 작업자: {task.CurrentWorkers}/{task.Data.MaxWorkers}");
+            Debug.Log($"  - 할당된 유닛: {string.Join(", ", task.AssignedUnits.Select(u => u.UnitName))}");
+            Debug.Log($"  - 가용: {task.CurrentWorkers < task.Data.MaxWorkers}");
         }
     }
 
@@ -560,12 +570,13 @@ public class TaskManager : MonoBehaviour
         int count = 0;
         foreach (var item in items)
         {
-            if (item != null && item.IsAvailable)
+            // ★ 공용 아이템만 등록 (개인 소유는 제외)
+            if (item != null && item.IsAvailable && item.IsPublic)
             {
                 AddPickupItemTask(item);
                 count++;
             }
         }
-        Debug.Log($"[TaskManager] {count}개 드랍 아이템 등록됨");
+        Debug.Log($"[TaskManager] {count}개 공용 드랍 아이템 등록됨");
     }
 }

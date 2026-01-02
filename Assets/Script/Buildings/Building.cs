@@ -47,7 +47,47 @@ public class Building : MonoBehaviour
     }
 
     /// <summary>
-    /// TaskManager
+    /// ★ Grid 위치 업데이트 (이동 시 사용)
+    /// </summary>
+    public void UpdateGridPosition(Vector3Int newGridPosition)
+    {
+        GridPosition = newGridPosition;
+        Debug.Log($"[Building] {data?.Name} GridPosition 업데이트: {newGridPosition}");
+    }
+
+    /// <summary>
+    /// ★ Task 위치 업데이트 (건물 이동 시 호출)
+    /// - 건설 작업의 목표 위치를 새 위치로 변경
+    /// - 작업 중인 유닛들에게 새 위치로 이동하라고 알림
+    /// </summary>
+    public void UpdateTaskLocation(Vector3 newWorldPosition)
+    {
+        if (constructionTask == null) return;
+
+        // 1. TaskData의 위치 업데이트
+        constructionTask.Data.TargetPosition = newWorldPosition;
+
+        // 2. 작업 중인 유닛들에게 새 위치로 이동하라고 알림
+        foreach (var unit in constructionTask.AssignedUnits)
+        {
+            if (unit != null && unit.IsAlive)
+            {
+                // 유닛을 새 위치로 이동시킴
+                unit.MoveTo(newWorldPosition);
+                Debug.Log($"[Building] {unit.UnitName}을(를) 새 위치로 이동시킴: {newWorldPosition}");
+            }
+        }
+
+        Debug.Log($"[Building] {data?.Name} Task 위치 업데이트: {newWorldPosition}");
+    }
+
+    /// <summary>
+    /// ★ 건설 Task 가져오기 (외부에서 확인용)
+    /// </summary>
+    public PostedTask GetConstructionTask() => constructionTask;
+
+    /// <summary>
+    /// 스스로 TaskManager에 등록
     /// </summary>
     private void RegisterConstructionTask()
     {
@@ -56,12 +96,12 @@ public class Building : MonoBehaviour
         var taskData = new TaskData(TaskType.Construct, transform.position, gameObject)
         {
             Priority = TaskPriority.Normal,
-            MaxWorkers = Mathf.Max(2, data.Size.x * data.Size.y), // 최소 2명
+            MaxWorkers = Mathf.Clamp(data.Size.x * data.Size.y, 1, 3),
             WorkRequired = data.ConstructionWorkRequired
         };
 
         constructionTask = TaskManager.Instance.PostTask(taskData, this);
-        Debug.Log($"[Building] {data.Name}");
+        Debug.Log($"[Building] {data.Name} 건설 작업 등록");
     }
 
     public bool DoConstructionWork(float workAmount)
@@ -100,7 +140,7 @@ public class Building : MonoBehaviour
         }
 
         OnConstructionComplete?.Invoke(this);
-        Debug.Log($"[Building] {data?.Name}!");
+        Debug.Log($"[Building] {data?.Name} 건설 완료!");
     }
 
     private void SetState(BuildingState newState) => currentState = newState;

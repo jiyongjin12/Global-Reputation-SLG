@@ -101,22 +101,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   resource: {fileID: 11400000, guid: 7697bfbb38c55c64fbefa1841da44f9a, type: 2}
   amount: 1
-  launchForce: 0.7
-  launchHeight: 5
+  launchForce: 1
+  launchHeight: 4
   gravity: 15
-  bounceDecay: 0.5
-  maxBounces: 2
+  bounceDecay: 0.6
+  maxBounces: 3
   groundY: 0.1
-  minBounceVelocity: 0.2
+  minBounceVelocity: 1.5
   spawnScaleDuration: 0.15
   maxSquashAmount: 0.5
   enableMagnet: 0
   magnetRadius: 3
-  windupBackDistance: 0.5
-  windupUpDistance: 0.5
-  windupDuration: 0.15
-  magnetPullDuration: 0.25
-  isAnimating: 1
+  windupBackDistance: 0.4
+  windupUpDistance: 0.6
+  windupDuration: 0.12
+  magnetPullDuration: 0.2
+  ownershipDuration: 10
+  isPublic: 0
+  isAnimating: 0
   isBeingMagneted: 0
 --- !u!1 &7438499777957745389
 GameObject:

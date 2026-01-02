@@ -150,7 +150,6 @@ GameObject:
   m_Component:
   - component: {fileID: 5706428522588265878}
   - component: {fileID: 4825928621487185506}
-  - component: {fileID: 449225703645596986}
   m_Layer: 0
   m_Name: Stone
   m_TagString: Untagged
@@ -187,55 +186,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2c477a3c745cc2643b9bb1a22ae66862, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  resource: {fileID: 0}
+  resource: {fileID: 11400000, guid: 07793162378ff2347ba23d12b899f785, type: 2}
   amount: 1
-  launchForce: 0.7
-  launchHeight: 4
-  gravity: 12
-  bounceDecay: 0.2
+  launchForce: 1
+  launchHeight: 5
+  gravity: 15
+  bounceDecay: 0.6
   maxBounces: 3
   groundY: 0.1
-  minBounceVelocity: 1
+  minBounceVelocity: 1.5
   spawnScaleDuration: 0.15
   maxSquashAmount: 0.5
-  scaleMaxHeight: 1.5
   enableMagnet: 1
-  magnetRadius: 3.5
-  windupBackDistance: 0.5
-  windupUpDistance: 0.8
-  windupDuration: 0.15
-  magnetPullDuration: 0.25
-  isAnimating: 0
-  isBeingMagneted: 0
---- !u!114 &449225703645596986
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8039310647319555218}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2c477a3c745cc2643b9bb1a22ae66862, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  resource: {fileID: 11400000, guid: 7697bfbb38c55c64fbefa1841da44f9a, type: 2}
-  amount: 1
-  launchForce: 0.7
-  launchHeight: 4
-  gravity: 15
-  bounceDecay: 0.3
-  maxBounces: 2
-  groundY: 0.1
-  minBounceVelocity: 0.2
-  spawnScaleDuration: 0.1
-  maxSquashAmount: 0.5
-  scaleMaxHeight: 1.5
-  enableMagnet: 0
   magnetRadius: 3
-  windupBackDistance: 0.5
-  windupUpDistance: 0.5
-  windupDuration: 0.15
-  magnetPullDuration: 0.25
-  isAnimating: 1
+  windupBackDistance: 0.4
+  windupUpDistance: 0.6
+  windupDuration: 0.12
+  magnetPullDuration: 0.2
+  ownershipDuration: 10
+  isPublic: 0
+  isAnimating: 0
   isBeingMagneted: 0

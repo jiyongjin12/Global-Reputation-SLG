@@ -35,6 +35,7 @@ public class PlacementSystem : MonoBehaviour
 
     // 이벤트
     public event Action<Building> OnBuildingPlaced;
+    public event Action<Building> OnBuildingMoved;
     public event Action<GameObject> OnBuildingRemoved;
     public event Action<string> OnPlacementFailed;
 
@@ -43,6 +44,40 @@ public class PlacementSystem : MonoBehaviour
         gridVisualization.SetActive(false);
         floorData = new();
         furnitureData = new();
+
+        // ★ GameInputManager 이벤트 연결
+        if (GameInputManager.Instance != null)
+        {
+            GameInputManager.Instance.OnActionTriggered += HandleGameAction;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        // 이벤트 해제
+        if (GameInputManager.Instance != null)
+        {
+            GameInputManager.Instance.OnActionTriggered -= HandleGameAction;
+        }
+    }
+
+    /// <summary>
+    /// ★ GameInputManager에서 액션 처리
+    /// </summary>
+    private void HandleGameAction(GameAction action)
+    {
+        switch (action)
+        {
+            case GameAction.MoveBuilding:
+                if (buildingState == null) // 다른 모드가 아닐 때만
+                    StartMoving();
+                break;
+
+            case GameAction.DeleteBuilding:
+                if (buildingState == null)
+                    StartRemoving();
+                break;
+        }
     }
 
     public void StartPlacement(int ID)
@@ -69,7 +104,7 @@ public class PlacementSystem : MonoBehaviour
 
         gridVisualization.SetActive(true);
 
-        // ★ 수정: GridDataManager 사용
+        // GridDataManager 사용
         GridData envData = null;
         if (GridDataManager.Instance != null)
         {
@@ -95,6 +130,9 @@ public class PlacementSystem : MonoBehaviour
 
         inputManager.OnClicked += PlaceStructure;
         inputManager.OnExit += StopPlacement;
+
+        // ★ GameInputManager에 현재 모드 등록
+        GameInputManager.Instance?.SetCurrentMode(StopPlacement, 50);
     }
 
     public void StartRemoving()
@@ -112,6 +150,38 @@ public class PlacementSystem : MonoBehaviour
         );
         inputManager.OnClicked += PlaceStructure;
         inputManager.OnExit += StopPlacement;
+
+        // ★ GameInputManager에 현재 모드 등록
+        GameInputManager.Instance?.SetCurrentMode(StopPlacement, 50);
+
+        Debug.Log("[PlacementSystem] 삭제 모드 시작 (X키 또는 버튼)");
+    }
+
+    /// <summary>
+    /// ★ 건물 이동 모드 시작
+    /// </summary>
+    public void StartMoving()
+    {
+        StopPlacement();
+        gridVisualization.SetActive(true);
+
+        buildingState = new MovingState(
+            grid,
+            preview,
+            floorData,
+            furnitureData,
+            database,
+            placedBuildings,
+            OnBuildingMovedInternal
+        );
+
+        inputManager.OnClicked += PlaceStructure;
+        inputManager.OnExit += StopPlacement;
+
+        // ★ GameInputManager에 현재 모드 등록
+        GameInputManager.Instance?.SetCurrentMode(StopPlacement, 50);
+
+        Debug.Log("[PlacementSystem] 이동 모드 시작 (C키 또는 버튼)");
     }
 
     private void PlaceStructure()
@@ -126,7 +196,7 @@ public class PlacementSystem : MonoBehaviour
         buildingState.OnAction(gridPosition);
     }
 
-    private void StopPlacement()
+    public void StopPlacement()
     {
         if (buildingState == null)
             return;
@@ -136,6 +206,9 @@ public class PlacementSystem : MonoBehaviour
         inputManager.OnExit -= StopPlacement;
         lastDetectedPosition = Vector3Int.zero;
         buildingState = null;
+
+        // ★ GameInputManager에서 현재 모드 해제
+        GameInputManager.Instance?.ClearCurrentMode();
     }
 
     private void Update()
@@ -154,9 +227,12 @@ public class PlacementSystem : MonoBehaviour
     private void OnBuildingPlacedInternal(Building building)
     {
         OnBuildingPlaced?.Invoke(building);
+    }
 
-        // ★ 수정: Building이 스스로 TaskManager에 등록하므로 여기서는 호출 안 함
-        // TaskManager.Instance?.AddConstructionTask(building);  // 삭제됨
+    private void OnBuildingMovedInternal(Building building)
+    {
+        OnBuildingMoved?.Invoke(building);
+        Debug.Log($"[PlacementSystem] 건물 이동됨: {building?.name}");
     }
 
     private void OnBuildingRemovedInternal(GameObject removedObj)
@@ -176,4 +252,9 @@ public class PlacementSystem : MonoBehaviour
     {
         return placedBuildings.TryGetValue(gridPosition, out var obj) ? obj : null;
     }
+
+    /// <summary>
+    /// 현재 모드 활성화 여부
+    /// </summary>
+    public bool IsInBuildMode => buildingState != null;
 }

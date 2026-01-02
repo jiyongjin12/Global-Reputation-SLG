@@ -79,6 +79,10 @@ public class UnitAI : MonoBehaviour
     private PostedTask pendingTask;
     private bool hasPendingTask = false;
 
+    // ★ 개인 아이템 목록 (자신이 드랍시킨 아이템)
+    private System.Collections.Generic.List<DroppedItem> personalItems = new();
+    private DroppedItem currentPersonalItem; // 현재 줍고 있는 개인 아이템
+
     // Properties
     public AIBehaviorState CurrentBehavior => currentBehavior;
     public TaskPriorityLevel CurrentPriority => currentPriority;
@@ -190,6 +194,10 @@ public class UnitAI : MonoBehaviour
         if (currentBehavior == AIBehaviorState.DeliveringToStorage)
             return;
 
+        // ★ 개인 아이템 줍기 중이면 계속
+        if (currentPersonalItem != null)
+            return;
+
         // 채집/아이템 줍기 중이면 계속 (나무/아이템 완료 후 다음 작업)
         if (bb.CurrentTask != null &&
             (currentBehavior == AIBehaviorState.Working || currentBehavior == AIBehaviorState.PickingUpItem))
@@ -198,7 +206,16 @@ public class UnitAI : MonoBehaviour
         // 인벤토리 가득 차면 창고로
         if (unit.Inventory.IsFull)
         {
+            // ★ 못 주운 개인 아이템 공용 전환
+            GiveUpRemainingPersonalItems();
             StartDeliveryToStorage();
+            return;
+        }
+
+        // ★ 개인 아이템이 있으면 먼저 줍기 (건설보다 낮지만 공용 아이템/채집보다 높음)
+        if (HasPersonalItems())
+        {
+            TryPickupPersonalItems();
             return;
         }
 
@@ -623,11 +640,26 @@ public class UnitAI : MonoBehaviour
         }
 
         float gather = unit.DoGather(node.Data?.NodeType);
-        node.Harvest(gather);
+
+        // ★ 채집 시 드랍된 아이템 받아오기
+        var droppedItems = node.Harvest(gather);
+
+        // ★ 드랍된 아이템에 Owner(나) 설정 + 개인 목록에 추가
+        foreach (var item in droppedItems)
+        {
+            if (item != null)
+            {
+                item.SetOwner(unit);
+                AddPersonalItem(item);
+            }
+        }
 
         if (node.IsDepleted)
         {
             CompleteCurrentTask();
+
+            // ★ 자원 고갈 시 개인 아이템 줍기 시작
+            TryPickupPersonalItems();
         }
         else if (unit.Inventory.IsFull)
         {
@@ -642,6 +674,14 @@ public class UnitAI : MonoBehaviour
 
     private void UpdatePickingUpItem()
     {
+        // ★ 개인 아이템 줍기 중이면 별도 처리
+        if (currentPersonalItem != null)
+        {
+            UpdatePickingUpPersonalItem();
+            return;
+        }
+
+        // TaskManager의 공용 아이템 줍기
         if (bb.CurrentTask == null)
         {
             SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
@@ -844,6 +884,234 @@ public class UnitAI : MonoBehaviour
     private void OnHungerCritical()
     {
         Debug.Log($"[UnitAI] {unit.UnitName}: 배고픔 위험!");
+    }
+
+    // ==================== 개인 아이템 시스템 ====================
+
+    /// <summary>
+    /// 개인 아이템 목록에 추가 (자신이 드랍시킨 아이템)
+    /// </summary>
+    public void AddPersonalItem(DroppedItem item)
+    {
+        if (item != null && !personalItems.Contains(item))
+        {
+            personalItems.Add(item);
+            Debug.Log($"[UnitAI] {unit.UnitName}: 개인 아이템 추가 ({personalItems.Count}개)");
+        }
+    }
+
+    /// <summary>
+    /// 개인 아이템 목록에서 제거
+    /// </summary>
+    public void RemovePersonalItem(DroppedItem item)
+    {
+        if (personalItems.Contains(item))
+        {
+            personalItems.Remove(item);
+
+            if (currentPersonalItem == item)
+                currentPersonalItem = null;
+        }
+    }
+
+    /// <summary>
+    /// 개인 아이템 줍기 시도
+    /// </summary>
+    private void TryPickupPersonalItems()
+    {
+        // 유효하지 않은 아이템 제거
+        personalItems.RemoveAll(item => item == null);
+
+        if (personalItems.Count == 0)
+            return;
+
+        // 인벤토리 가득 차면 창고로
+        if (unit.Inventory.IsFull)
+        {
+            // 못 주운 아이템들은 공용으로 전환
+            GiveUpRemainingPersonalItems();
+            StartDeliveryToStorage();
+            return;
+        }
+
+        // 가장 가까운 개인 아이템 찾기
+        DroppedItem nearest = FindNearestPersonalItem();
+        if (nearest != null)
+        {
+            StartPickingUpPersonalItem(nearest);
+        }
+    }
+
+    /// <summary>
+    /// 가장 가까운 개인 아이템 찾기
+    /// </summary>
+    private DroppedItem FindNearestPersonalItem()
+    {
+        DroppedItem nearest = null;
+        float minDist = float.MaxValue;
+
+        foreach (var item in personalItems)
+        {
+            if (item == null) continue;
+
+            float dist = Vector3.Distance(transform.position, item.transform.position);
+            if (dist < minDist)
+            {
+                minDist = dist;
+                nearest = item;
+            }
+        }
+        return nearest;
+    }
+
+    /// <summary>
+    /// 개인 아이템 줍기 시작
+    /// </summary>
+    private void StartPickingUpPersonalItem(DroppedItem item)
+    {
+        currentPersonalItem = item;
+
+        // ★ 애니메이션 중이 아니면 예약 (중이면 나중에 예약)
+        if (!item.IsAnimating)
+        {
+            item.Reserve(unit);
+        }
+
+        unit.MoveTo(item.transform.position);
+        SetBehaviorAndPriority(AIBehaviorState.PickingUpItem, TaskPriorityLevel.ItemPickup);
+        pickupTimer = 0f;
+
+        Debug.Log($"[UnitAI] {unit.UnitName}: 개인 아이템 줍기 시작 ({item.Resource?.ResourceName}) {(item.IsAnimating ? "[애니메이션 대기]" : "")}");
+    }
+
+    /// <summary>
+    /// 개인 아이템 줍기 상태 업데이트
+    /// </summary>
+    private void UpdatePickingUpPersonalItem()
+    {
+        // 현재 줍고 있는 개인 아이템이 없으면
+        if (currentPersonalItem == null)
+        {
+            // 다음 개인 아이템 찾기
+            TryPickupPersonalItems();
+
+            if (currentPersonalItem == null)
+            {
+                SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+            }
+            return;
+        }
+
+        // ★ 아이템이 사라졌으면 (다른 방식으로 수거됨)
+        if (currentPersonalItem == null || currentPersonalItem.gameObject == null)
+        {
+            currentPersonalItem = null;
+            TryPickupPersonalItems();
+            return;
+        }
+
+        // ★ 애니메이션 중이면 대기 (아이템이 튀어오르는 중)
+        if (currentPersonalItem.IsAnimating)
+        {
+            // 가까이 가면서 대기
+            float distToItem = Vector3.Distance(transform.position, currentPersonalItem.transform.position);
+            if (distToItem > pickupRadius && unit.HasArrivedAtDestination())
+            {
+                unit.MoveTo(currentPersonalItem.transform.position);
+            }
+            pickupTimer = 0f; // 타이머 리셋
+            return;
+        }
+
+        // ★ 예약 안 되어 있으면 다시 시도
+        if (!currentPersonalItem.IsReserved)
+        {
+            currentPersonalItem.Reserve(unit);
+        }
+
+        float dist = Vector3.Distance(transform.position, currentPersonalItem.transform.position);
+
+        // 아이템 위치로 이동
+        if (dist > pickupRadius)
+        {
+            if (unit.HasArrivedAtDestination())
+                unit.MoveTo(currentPersonalItem.transform.position);
+            pickupTimer = 0f;
+            return;
+        }
+
+        // 줍기 (시간 소요)
+        pickupTimer += Time.deltaTime;
+
+        if (pickupTimer >= itemPickupDuration)
+        {
+            // 줍기 완료!
+            if (!unit.Inventory.IsFull && currentPersonalItem != null)
+            {
+                // ★ 먼저 데이터 저장 (PickUp 성공 시 오브젝트 파괴됨)
+                var resource = currentPersonalItem.Resource;
+                var amount = currentPersonalItem.Amount;
+
+                // ★ PickUp 성공 여부 확인
+                if (currentPersonalItem.PickUp(unit))
+                {
+                    unit.Inventory.AddItem(resource, amount);
+                    Debug.Log($"[UnitAI] {unit.UnitName}: 개인 아이템 줍기 완료! ({resource?.ResourceName})");
+
+                    RemovePersonalItem(currentPersonalItem);
+                    currentPersonalItem = null;
+                    pickupTimer = 0f;
+
+                    // 다음 개인 아이템 찾기
+                    TryPickupPersonalItems();
+
+                    if (personalItems.Count == 0 && currentPersonalItem == null)
+                    {
+                        SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+                    }
+                }
+                else
+                {
+                    // ★ PickUp 실패 (아직 애니메이션 중이거나 다른 이유)
+                    // 타이머 리셋해서 재시도
+                    Debug.Log($"[UnitAI] {unit.UnitName}: 아이템 줍기 실패, 재시도...");
+                    pickupTimer = 0f;
+                }
+            }
+            else if (unit.Inventory.IsFull)
+            {
+                // 인벤토리 가득 참 → 남은 아이템 포기
+                GiveUpRemainingPersonalItems();
+                StartDeliveryToStorage();
+            }
+        }
+    }
+
+    /// <summary>
+    /// 남은 개인 아이템들 포기 (공용으로 전환)
+    /// </summary>
+    private void GiveUpRemainingPersonalItems()
+    {
+        foreach (var item in personalItems)
+        {
+            if (item != null)
+            {
+                item.OwnerGiveUp();
+            }
+        }
+        personalItems.Clear();
+        currentPersonalItem = null;
+
+        Debug.Log($"[UnitAI] {unit.UnitName}: 남은 개인 아이템 포기 → 공용 전환");
+    }
+
+    /// <summary>
+    /// 개인 아이템이 있는지 확인
+    /// </summary>
+    public bool HasPersonalItems()
+    {
+        personalItems.RemoveAll(item => item == null);
+        return personalItems.Count > 0 || currentPersonalItem != null;
     }
 
     // 호환성

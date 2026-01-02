@@ -1,83 +1,95 @@
-using System;
+ï»¿using System;
 using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// ¹Ù´Ú¿¡ µå·ÓµÈ ¾ÆÀÌÅÛ
-/// - ÀÚ¿ø ÆÄ±« ½Ã Æ¢¾î³ª¿À´Â ¾Ö´Ï¸ŞÀÌ¼Ç
-/// - ¹Ù´Ú¿¡¼­ ÅëÅë Æ¢´Â È¿°ú (½ºÄÉÀÏÀº YÀ§Ä¡¿¡ ºñ·Ê)
-/// - ÀÚ¼® Èí¼ö´Â ¿É¼Ç (Æ¯¼º¿ë)
+/// ë°”ë‹¥ì— ë“œë¡­ëœ ì•„ì´í…œ
+/// - ìì› íŒŒê´´ ì‹œ íŠ€ì–´ì˜¤ëŠ” ì• ë‹ˆë©”ì´ì…˜
+/// - ë°”ë‹¥ì—ì„œ í†µí†µ íŠ€ëŠ” íš¨ê³¼ (ìŠ¤ì¼€ì¼ì€ Yìœ„ì¹˜ì— ë¹„ë¡€)
+/// - ìì„ í¡ìˆ˜ëŠ” ì˜µì…˜ (íŠ¹ì„±ìš©)
+/// - ì†Œìœ ê¶Œ ì‹œìŠ¤í…œ: ì±„ì§‘í•œ ìœ ë‹›ì´ ìš°ì„  ì¤ê¸°
 /// </summary>
 public class DroppedItem : MonoBehaviour
 {
-    [Header("=== ÀÚ¿ø Á¤º¸ ===")]
-    [Tooltip("µå·ÓµÈ ÀÚ¿ø ¾ÆÀÌÅÛ µ¥ÀÌÅÍ")]
+    [Header("=== ìì› ì •ë³´ ===")]
+    [Tooltip("ë“œë¡­ëœ ìì› ì•„ì´í…œ ë°ì´í„°")]
     [SerializeField] private ResourceItemSO resource;
 
-    [Tooltip("µå·ÓµÈ ¼ö·®")]
+    [Tooltip("ë“œë¡­ëœ ìˆ˜ëŸ‰")]
     [SerializeField] private int amount = 1;
 
-    [Header("=== ¹ß»ç ¼³Á¤ ===")]
-    [Tooltip("¼öÆò ¹æÇâÀ¸·Î Æ¢¾î³ª°¡´Â Èû")]
+    [Header("=== ë°œì‚¬ ì„¤ì • ===")]
+    [Tooltip("ìˆ˜í‰ ë°©í–¥ìœ¼ë¡œ íŠ€ê²¨ë‚˜ê°€ëŠ” í˜")]
     [SerializeField] private float launchForce = 2.5f;
 
-    [Tooltip("À§·Î Æ¢¾î¿À¸£´Â ÃÊ±â ¼Óµµ")]
+    [Tooltip("ìœ„ë¡œ íŠ€ì–´ì˜¤ë¥´ëŠ” ì´ˆê¸° ì†ë„")]
     [SerializeField] private float launchHeight = 4f;
 
-    [Tooltip("Áß·Â °¡¼Óµµ")]
+    [Tooltip("ì¤‘ë ¥ ê°€ì†ë„")]
     [SerializeField] private float gravity = 15f;
 
-    [Header("=== ¹Ù¿î½º ¼³Á¤ ===")]
-    [Tooltip("¹Ù¿î½º ½Ã ¼Óµµ À¯ÁöÀ² (0.6 = 60% ¼Óµµ À¯Áö)")]
+    [Header("=== ë°”ìš´ìŠ¤ ì„¤ì • ===")]
+    [Tooltip("ë°”ìš´ìŠ¤ ì‹œ ì†ë„ ìœ ì§€ìœ¨ (0.6 = 60% ì†ë„ ìœ ì§€)")]
     [Range(0.3f, 0.85f)]
     [SerializeField] private float bounceDecay = 0.6f;
 
-    [Tooltip("ÃÖ´ë ¹Ù¿î½º È½¼ö")]
+    [Tooltip("ìµœëŒ€ ë°”ìš´ìŠ¤ íšŸìˆ˜")]
     [SerializeField] private int maxBounces = 3;
 
-    [Tooltip("¹Ù´Ú Y ÁÂÇ¥")]
+    [Tooltip("ë°”ë‹¥ Y ì¢Œí‘œ")]
     [SerializeField] private float groundY = 0.1f;
 
-    [Tooltip("¹Ù¿î½º Á¾·á ÆÇÁ¤ ¼Óµµ")]
+    [Tooltip("ë°”ìš´ìŠ¤ ì¢…ë£Œ íŒì • ì†ë„")]
     [SerializeField] private float minBounceVelocity = 1.5f;
 
-    [Header("=== ½ºÄÉÀÏ ¼³Á¤ (¼Óµµ ±â¹İ Åº¼º) ===")]
-    [Tooltip("½ºÆù ½Ã 0¡æ1 Ä¿Áö´Â ½Ã°£")]
+    [Header("=== ìŠ¤ì¼€ì¼ ì„¤ì • (ì†ë„ ê¸°ë°˜ íƒ„ì„±) ===")]
+    [Tooltip("ìŠ¤í° ì‹œ 0â†’1 ì»¤ì§€ëŠ” ì‹œê°„")]
     [SerializeField] private float spawnScaleDuration = 0.15f;
 
-    [Tooltip("¹Ù´Ú Ãæµ¹/³«ÇÏ ½Ã ÃÖ´ë ³³ÀÛÇØÁö´Â Á¤µµ (0.5 = Y°¡ 50%·Î)")]
+    [Tooltip("ë°”ë‹¥ ì¶©ëŒ/ë‚™í•˜ ì‹œ ìµœëŒ€ ë‚©ì‘í•´ì§€ëŠ” ì •ë„ (0.5 = Yê°€ 50%ë¡œ)")]
     [Range(0.2f, 0.7f)]
     [SerializeField] private float maxSquashAmount = 0.5f;
 
-    [Header("=== ÀÚ¼® Èí¼ö (Æ¯¼º¿ë, ±âº» OFF) ===")]
-    [Tooltip("ÀÚ¼® Èí¼ö ±â´É È°¼ºÈ­ (Æ¯¼ºÀ¸·Î ÄÑÁü)")]
+    [Header("=== ìì„ í¡ìˆ˜ (íŠ¹ì„±ìš©, ê¸°ë³¸ OFF) ===")]
+    [Tooltip("ìì„ í¡ìˆ˜ ê¸°ëŠ¥ í™œì„±í™” (íŠ¹ì„±ìœ¼ë¡œ ì¼œì§)")]
     [SerializeField] private bool enableMagnet = false;
 
-    [Tooltip("ÀÚ¼® Èí¼ö ¹üÀ§")]
+    [Tooltip("ìì„ í¡ìˆ˜ ë²”ìœ„")]
     [SerializeField] private float magnetRadius = 3f;
 
-    [Tooltip("À©µå¾÷ - µÚ·Î ºüÁö´Â °Å¸®")]
+    [Tooltip("ìœˆë“œì—… - ë’¤ë¡œ ë¹ ì§€ëŠ” ê±°ë¦¬")]
     [SerializeField] private float windupBackDistance = 0.4f;
 
-    [Tooltip("À©µå¾÷ - À§·Î ¶ß´Â ³ôÀÌ")]
+    [Tooltip("ìœˆë“œì—… - ìœ„ë¡œ ëœ¨ëŠ” ë†’ì´")]
     [SerializeField] private float windupUpDistance = 0.6f;
 
-    [Tooltip("À©µå¾÷ ½Ã°£")]
+    [Tooltip("ìœˆë“œì—… ì‹œê°„")]
     [SerializeField] private float windupDuration = 0.12f;
 
-    [Tooltip("»¡·Áµé¾î°¡´Â ½Ã°£")]
+    [Tooltip("ë¹¨ë ¤ë“¤ì–´ì˜¤ëŠ” ì‹œê°„")]
     [SerializeField] private float magnetPullDuration = 0.2f;
 
-    [Header("=== »óÅÂ ===")]
+    [Header("=== â˜… ì†Œìœ ê¶Œ ì‹œìŠ¤í…œ ===")]
+    [Tooltip("ê°œì¸ ì†Œìœ  ìœ ì§€ ì‹œê°„ (ì´ˆ)")]
+    [SerializeField] private float ownershipDuration = 10f;
+
+    [Tooltip("ê³µìš© ì—¬ë¶€ (trueë©´ ëˆ„êµ¬ë‚˜ ì¤ê¸° ê°€ëŠ¥)")]
+    [SerializeField] private bool isPublic = true;  // ê¸°ë³¸ê°’: ê³µìš© (ê¸°ì¡´ ë™ì‘ ìœ ì§€)
+
+    [Header("=== ìƒíƒœ ===")]
     [SerializeField] private bool isAnimating = false;
     [SerializeField] private bool isBeingMagneted = false;
 
-    // ³»ºÎ »óÅÂ
+    // ë‚´ë¶€ ìƒíƒœ
     private bool isBeingCarried = false;
     private bool isReserved = false;
     private Unit reservedBy = null;
     private Vector3 originalScale;
     private Coroutine magnetCoroutine;
+
+    // ì†Œìœ ê¶Œ ì‹œìŠ¤í…œ
+    private Unit owner = null;
+    private float ownershipTimer = 0f;
 
     // Properties
     public ResourceItemSO Resource => resource;
@@ -87,9 +99,14 @@ public class DroppedItem : MonoBehaviour
     public Unit ReservedBy => reservedBy;
     public bool IsAnimating => isAnimating;
 
-    // ÀÌº¥Æ®
+    // ì†Œìœ ê¶Œ Properties
+    public Unit Owner => owner;
+    public bool IsPublic => isPublic;
+
+    // ì´ë²¤íŠ¸
     public event Action<DroppedItem> OnPickedUp;
     public event Action<DroppedItem> OnAnimationComplete;
+    public event Action<DroppedItem> OnBecamePublic;  // ê³µìš© ì „í™˜ ì‹œ
 
     private void Awake()
     {
@@ -98,7 +115,18 @@ public class DroppedItem : MonoBehaviour
 
     private void Update()
     {
-        // ÀÚ¼® È°¼ºÈ­ + ¾Ö´Ï¸ŞÀÌ¼Ç ³¡³­ »óÅÂ¿¡¼­¸¸ Å½Áö
+        // ê°œì¸ ì†Œìœ  ìƒíƒœì—ì„œ ì‹œê°„ ê²½ê³¼ ì²´í¬
+        if (!isPublic && owner != null)
+        {
+            ownershipTimer += Time.deltaTime;
+
+            if (ownershipTimer >= ownershipDuration)
+            {
+                BecomePublic();
+            }
+        }
+
+        // ìì„ í™œì„±í™” + ì• ë‹ˆë©”ì´ì…˜ ëë‚œ ìƒíƒœì—ì„œë§Œ íƒì§€
         if (enableMagnet && !isAnimating && !isBeingMagneted && !isBeingCarried)
         {
             TryFindMagnetTarget();
@@ -113,17 +141,75 @@ public class DroppedItem : MonoBehaviour
     }
 
     /// <summary>
-    /// ÀÚ¼® ±â´É È°¼ºÈ­/ºñÈ°¼ºÈ­ (Æ¯¼º¿¡¼­ È£Ãâ)
+    /// ìì„ ê¸°ëŠ¥ í™œì„±í™”/ë¹„í™œì„±í™” (íŠ¹ì„±ì—ì„œ í˜¸ì¶œ)
     /// </summary>
     public void SetMagnetEnabled(bool enabled)
     {
         enableMagnet = enabled;
     }
 
-    // ==================== µå¶ø ¾Ö´Ï¸ŞÀÌ¼Ç ====================
+    // ==================== ì†Œìœ ê¶Œ ì‹œìŠ¤í…œ ====================
 
     /// <summary>
-    /// Æ¢¾î³ª¿À´Â ¾Ö´Ï¸ŞÀÌ¼Ç ½ÃÀÛ
+    /// ì†Œìœ ì ì„¤ì • (ì±„ì§‘í•œ ìœ ë‹›)
+    /// </summary>
+    public void SetOwner(Unit ownerUnit)
+    {
+        owner = ownerUnit;
+        isPublic = false;
+        ownershipTimer = 0f;
+
+        Debug.Log($"[DroppedItem] {resource?.ResourceName} ì†Œìœ ì ì„¤ì •: {ownerUnit?.UnitName}");
+    }
+
+    /// <summary>
+    /// ê³µìš©ìœ¼ë¡œ ì „í™˜ (10ì´ˆ ê²½ê³¼ ë˜ëŠ” ì†Œìœ ì í¬ê¸°)
+    /// </summary>
+    public void BecomePublic()
+    {
+        if (isPublic) return;
+
+        isPublic = true;
+        owner = null;
+
+        Debug.Log($"[DroppedItem] {resource?.ResourceName} ê³µìš©ìœ¼ë¡œ ì „í™˜ë¨");
+
+        // TaskManagerì— ë“±ë¡
+        TaskManager.Instance?.AddPickupItemTask(this);
+
+        OnBecamePublic?.Invoke(this);
+    }
+
+    /// <summary>
+    /// ì†Œìœ ìê°€ ì¤ê¸° í¬ê¸° (ì¸ë²¤ ê°€ë“ ì°¸ ë“±)
+    /// </summary>
+    public void OwnerGiveUp()
+    {
+        if (isPublic) return;
+
+        Debug.Log($"[DroppedItem] {resource?.ResourceName} ì†Œìœ ì í¬ê¸° â†’ ê³µìš© ì „í™˜");
+        BecomePublic();
+    }
+
+    /// <summary>
+    /// íŠ¹ì • ìœ ë‹›ì´ ì´ ì•„ì´í…œì„ ì¤ì„ ìˆ˜ ìˆëŠ”ì§€ í™•ì¸
+    /// </summary>
+    public bool CanBePickedUpBy(Unit unit)
+    {
+        if (isBeingCarried) return false;
+        if (isAnimating) return false;
+
+        // ê³µìš©ì´ë©´ ëˆ„êµ¬ë‚˜ ê°€ëŠ¥
+        if (isPublic) return true;
+
+        // ê°œì¸ ì†Œìœ ë©´ Ownerë§Œ ê°€ëŠ¥
+        return owner == unit;
+    }
+
+    // ==================== ë“œë ì• ë‹ˆë©”ì´ì…˜ ====================
+
+    /// <summary>
+    /// íŠ€ì–´ì˜¤ëŠ” ì• ë‹ˆë©”ì´ì…˜ ì‹œì‘
     /// </summary>
     public void PlayDropAnimation(Vector3 spawnPosition)
     {
@@ -135,10 +221,10 @@ public class DroppedItem : MonoBehaviour
     {
         isAnimating = true;
 
-        // ½ºÄÉÀÏ 0¿¡¼­ ½ÃÀÛ
+        // ìŠ¤ì¼€ì¼ 0ì—ì„œ ì‹œì‘
         transform.localScale = Vector3.zero;
 
-        // ·£´ı ¹æÇâÀ¸·Î ¹ß»ç
+        // ëœë¤ ë°©í–¥ìœ¼ë¡œ ë°œì‚¬
         Vector2 randomDir = UnityEngine.Random.insideUnitCircle.normalized;
         float randomForce = UnityEngine.Random.Range(launchForce * 0.8f, launchForce * 1.2f);
 
@@ -150,7 +236,7 @@ public class DroppedItem : MonoBehaviour
 
         Vector3 position = transform.position;
 
-        // ========== 1´Ü°è: ½ºÄÉÀÏ Ä¿Áö¸é¼­ ¹ß»ç ==========
+        // ========== 1ë‹¨ê³„: ìŠ¤ì¼€ì¼ ì»¤ì§€ë©´ì„œ ë°œì‚¬ ==========
         float scaleTimer = 0f;
         while (scaleTimer < spawnScaleDuration)
         {
@@ -168,12 +254,12 @@ public class DroppedItem : MonoBehaviour
 
         transform.localScale = originalScale;
 
-        // ========== 2´Ü°è: ¹°¸® ¹Ù¿î½º ==========
+        // ========== 2ë‹¨ê³„: ë¬¼ë¦¬ ë°”ìš´ìŠ¤ ==========
         int bounceCount = 0;
 
         while (bounceCount < maxBounces)
         {
-            // ³«ÇÏ
+            // ë‚™í•˜
             while (position.y > groundY)
             {
                 velocity.y -= gravity * Time.deltaTime;
@@ -183,22 +269,22 @@ public class DroppedItem : MonoBehaviour
 
                 transform.position = position;
 
-                // ¡Ú ¼Óµµ¿¡ µû¸¥ ½ºÄÉÀÏ (¶³¾îÁú ¶§ ³³ÀÛ)
+                // ì†ë„ì— ë”°ë¥¸ ìŠ¤ì¼€ì¼ (ë–¨ì–´ì§ˆ ë•Œ ë‚©ì‘)
                 UpdateScaleByVelocity(velocity.y);
 
                 yield return null;
             }
 
-            // ¹Ù´Ú µµÂø ¡æ ÃÖ´ë ½ºÄõ½Ã!
+            // ë°”ë‹¥ ë„ì°© â†’ ìµœëŒ€ ìŠ¤ì¿¼ì‹œ!
             position.y = groundY;
             transform.position = position;
             ApplyImpactSquash();
 
-            // ¹Ù¿î½º Á¾·á Ã¼Å©
+            // ë°”ìš´ìŠ¤ ì¢…ë£Œ ì²´í¬
             if (Mathf.Abs(velocity.y) < minBounceVelocity)
                 break;
 
-            // ¡Ú ¹Ù¿î½º! (À§·Î Æ¢¾î¿À¸£±â)
+            // ë°”ìš´ìŠ¤! (ìœ„ë¡œ íŠ€ì–´ì˜¤ë¥´ê¸°)
             float bounceVelocity = Mathf.Abs(velocity.y) * bounceDecay;
             velocity.y = bounceVelocity;
             velocity.x *= bounceDecay;
@@ -206,7 +292,7 @@ public class DroppedItem : MonoBehaviour
 
             bounceCount++;
 
-            // ¡Ú ½ÇÁ¦ ¹Ù¿î½º - À§·Î ¿Ã¶ó°¬´Ù°¡ ³»·Á¿À±â
+            // ì‹¤ì œ ë°”ìš´ìŠ¤ - ìœ„ë¡œ ì˜¬ë¼ê°”ë‹¤ê°€ ë‚´ë ¤ì˜¤ê¸°
             while (true)
             {
                 velocity.y -= gravity * Time.deltaTime;
@@ -214,42 +300,42 @@ public class DroppedItem : MonoBehaviour
                 velocity.x *= 0.99f;
                 velocity.z *= 0.99f;
 
-                // ¹Ù´Ú ¾Æ·¡·Î ³»·Á°¡Áö ¾Ê°Ô
+                // ë°”ë‹¥ ì•„ë˜ë¡œ ë‚´ë ¤ê°€ì§€ ì•Šê²Œ
                 if (position.y < groundY)
                     position.y = groundY;
 
                 transform.position = position;
 
-                // ¡Ú ¼Óµµ¿¡ µû¸¥ ½ºÄÉÀÏ (Æ¢¾î¿À¸¦ ¶§ ±æÂß, ¶³¾îÁú ¶§ ³³ÀÛ)
+                // ì†ë„ì— ë”°ë¥¸ ìŠ¤ì¼€ì¼
                 UpdateScaleByVelocity(velocity.y);
 
-                yield return null;
-
-                // ¹Ù´Ú¿¡ ´ê°í ¼Óµµ°¡ ¾Æ·¡·Î ÇâÇÏ¸é ´ÙÀ½ ¹Ù¿î½º·Î
+                // ë‹¤ì‹œ ë°”ë‹¥ì— ë‹¿ìœ¼ë©´ ë‹¤ìŒ ë°”ìš´ìŠ¤
                 if (position.y <= groundY && velocity.y <= 0)
                     break;
+
+                yield return null;
             }
         }
 
-        // ========== 3´Ü°è: ÃÖÁ¾ Á¤Âø ==========
+        // ========== 3ë‹¨ê³„: ì •ì§€ ==========
         position.y = groundY;
         transform.position = position;
-        transform.localScale = originalScale; // ¿ø·¡ ½ºÄÉÀÏ·Î º¹¿ø
+        transform.localScale = originalScale;
 
         isAnimating = false;
         OnAnimationComplete?.Invoke(this);
     }
 
     /// <summary>
-    ///  ¼Óµµ¿¡ µû¸¥ ½ºÄÉÀÏ ¾÷µ¥ÀÌÆ® (Åº¼º È¿°ú)
-    /// - ¶³¾îÁú ¶§ (velocity < 0): ³³ÀÛ (Y, XZ)
-    /// - Æ¢¾î¿À¸¦ ¶§ (velocity > 0): ±æÂß (Y, XZ)
-    /// - Á¤Áö (velocity  0): ¿ø·¡ ½ºÄÉÀÏ
+    /// ì†ë„ ê¸°ë°˜ íƒ„ì„± ìŠ¤ì¼€ì¼:
+    /// - ë‚™í•˜ (velocity < 0): ë‚©ì‘ (ìŠ¤ì¿¼ì‹œ)
+    /// - ìƒìŠ¹ (velocity > 0): ê¸¸ì­‰ (ìŠ¤íŠ¸ë ˆì¹˜)
+    /// - ì •ì§€ (velocity â‰ˆ 0): ì›ë˜ ìŠ¤ì¼€ì¼
     /// </summary>
     private void UpdateScaleByVelocity(float velocityY)
     {
-        // ¼Óµµ¸¦ -1 ~ 1 ¹üÀ§·Î Á¤±ÔÈ­ (maxVelocity ±âÁØ)
-        float maxVelocity = launchHeight; // ÃÖ´ë ¼Óµµ = ÃÊ±â ¹ß»ç ¼Óµµ
+        // ì†ë„ë¥¼ -1 ~ 1 ë²”ìœ„ë¡œ ì •ê·œí™” (maxVelocity ê¸°ì¤€)
+        float maxVelocity = launchHeight; // ìµœëŒ€ ì†ë„ = ì´ˆê¸° ë°œì‚¬ ì†ë„
         float normalizedVelocity = Mathf.Clamp(velocityY / maxVelocity, -1f, 1f);
 
         float scaleY;
@@ -257,21 +343,21 @@ public class DroppedItem : MonoBehaviour
 
         if (normalizedVelocity < 0)
         {
-            // ¶³¾îÁö´Â Áß: ³³ÀÛÇØÁü (Y ÁÙ°í, XZ ´Ã¾î³²)
+            // ë–¨ì–´ì§€ëŠ” ì¤‘: ë‚©ì‘í•´ì§ (Y ì¤„ê³ , XZ ë„“ì–´ì§)
             float squash = Mathf.Abs(normalizedVelocity) * maxSquashAmount;
-            scaleY = 1f - squash;           // ¿¹: 1 - 0.5 = 0.5
-            scaleXZ = 1f + squash * 0.6f;   // ¿¹: 1 + 0.3 = 1.3
+            scaleY = 1f - squash;           // ì˜ˆ: 1 - 0.5 = 0.5
+            scaleXZ = 1f + squash * 0.6f;   // ì˜ˆ: 1 + 0.3 = 1.3
         }
         else if (normalizedVelocity > 0)
         {
-            // Æ¢¾î¿À¸£´Â Áß: ±æÂßÇØÁü (Y ´Ã°í, XZ ÁÙ¾îµê)
+            // íŠ€ì–´ì˜¤ë¥´ëŠ” ì¤‘: ê¸¸ì­‰í•´ì§ (Y ëŠ˜ê³ , XZ ì¤„ì–´ë“¦)
             float stretch = normalizedVelocity * maxSquashAmount * 0.5f;
-            scaleY = 1f + stretch;          // ¿¹: 1 + 0.25 = 1.25
-            scaleXZ = 1f - stretch * 0.4f;  // ¿¹: 1 - 0.1 = 0.9
+            scaleY = 1f + stretch;          // ì˜ˆ: 1 + 0.25 = 1.25
+            scaleXZ = 1f - stretch * 0.4f;  // ì˜ˆ: 1 - 0.1 = 0.9
         }
         else
         {
-            // Á¤Áö: ¿ø·¡ ½ºÄÉÀÏ
+            // ì •ì§€: ì›ë˜ ìŠ¤ì¼€ì¼
             scaleY = 1f;
             scaleXZ = 1f;
         }
@@ -284,11 +370,11 @@ public class DroppedItem : MonoBehaviour
     }
 
     /// <summary>
-    /// ¹Ù´Ú Ãæµ¹ ½Ã ½ºÄõ½Ã È¿°ú (¼ø°£ÀûÀ¸·Î È® ³³ÀÛ)
+    /// ë°”ë‹¥ ì¶©ëŒ ì‹œ ìŠ¤ì¿¼ì‹œ íš¨ê³¼ (ìˆœê°„ì ìœ¼ë¡œ í™• ë‚©ì‘)
     /// </summary>
     private void ApplyImpactSquash()
     {
-        float scaleY = 1f - maxSquashAmount;      // ÃÖ´ë ³³ÀÛ
+        float scaleY = 1f - maxSquashAmount;      // ìµœëŒ€ ë‚©ì‘
         float scaleXZ = 1f + maxSquashAmount * 0.7f;
 
         transform.localScale = new Vector3(
@@ -298,7 +384,7 @@ public class DroppedItem : MonoBehaviour
         );
     }
 
-    // ==================== ÀÚ¼® Èí¼ö (Æ¯¼º¿ë) ====================
+    // ==================== ìì„ í¡ìˆ˜ (íŠ¹ì„±ìš©) ====================
 
     private void TryFindMagnetTarget()
     {
@@ -313,6 +399,9 @@ public class DroppedItem : MonoBehaviour
         {
             var unit = col.GetComponent<Unit>();
             if (unit == null || !unit.IsAlive || unit.Inventory.IsFull) continue;
+
+            // ê°œì¸ ì†Œìœ ë©´ Ownerë§Œ ìì„ ëŒ€ìƒ
+            if (!isPublic && owner != unit) continue;
 
             float dist = Vector3.Distance(transform.position, unit.transform.position);
             if (dist < nearestDist)
@@ -344,7 +433,7 @@ public class DroppedItem : MonoBehaviour
         Vector3 awayDirection = (startPos - targetPos).normalized;
         awayDirection.y = 0;
 
-        // À©µå¾÷ (µÚ·Î ºüÁö¸é¼­ À§·Î)
+        // ìœˆë“œì—… (ë’¤ë¡œ ë¹ ì§€ë©´ì„œ ìœ„ë¡œ)
         Vector3 windupTarget = startPos + awayDirection * windupBackDistance + Vector3.up * windupUpDistance;
 
         float timer = 0f;
@@ -360,7 +449,7 @@ public class DroppedItem : MonoBehaviour
             yield return null;
         }
 
-        // »¡·Áµé¾î°¡±â (º£Áö¾î °î¼±)
+        // ë¹¨ë ¤ë“¤ì–´ì˜¤ê¸° (ë² ì§€ì–´ ê³¡ì„ )
         Vector3 pullStartPos = transform.position;
         timer = 0f;
 
@@ -381,7 +470,7 @@ public class DroppedItem : MonoBehaviour
             yield return null;
         }
 
-        // ÀÎº¥Åä¸®¿¡ Ãß°¡
+        // ì¸ë²¤í† ë¦¬ì— ì¶”ê°€
         if (target != null && target.IsAlive && !target.Inventory.IsFull)
         {
             target.Inventory.AddItem(resource, amount);
@@ -402,11 +491,15 @@ public class DroppedItem : MonoBehaviour
         transform.localScale = originalScale;
     }
 
-    // ==================== ±âº» ±â´É ====================
+    // ==================== ê¸°ë³¸ ê¸°ëŠ¥ ====================
 
     public bool Reserve(Unit unit)
     {
         if (!IsAvailable) return false;
+
+        // ê°œì¸ ì†Œìœ  ì•„ì´í…œì€ Ownerë§Œ ì˜ˆì•½ ê°€ëŠ¥
+        if (!CanBePickedUpBy(unit)) return false;
+
         isReserved = true;
         reservedBy = unit;
         return true;
@@ -419,12 +512,19 @@ public class DroppedItem : MonoBehaviour
     }
 
     /// <summary>
-    /// À¯´ÖÀÌ ¾ÆÀÌÅÛ Áİ±â
+    /// ìœ ë‹›ì´ ì•„ì´í…œ ì¤ê¸°
     /// </summary>
     public bool PickUp(Unit unit)
     {
         if (isBeingCarried) return false;
         if (isReserved && reservedBy != unit) return false;
+
+        // ì¤ê¸° ê¶Œí•œ ì²´í¬
+        if (!CanBePickedUpBy(unit))
+        {
+            Debug.LogWarning($"[DroppedItem] {unit.UnitName}ì€(ëŠ”) ì´ ì•„ì´í…œì„ ì£¼ìš¸ ìˆ˜ ì—†ìŒ (Owner: {owner?.UnitName})");
+            return false;
+        }
 
         isBeingCarried = true;
 
@@ -437,7 +537,7 @@ public class DroppedItem : MonoBehaviour
         return true;
     }
 
-    // ==================== ÀÌÂ¡ ÇÔ¼ö ====================
+    // ==================== ì´ì§• í•¨ìˆ˜ ====================
 
     private float EaseOutBack(float t)
     {
@@ -455,12 +555,28 @@ public class DroppedItem : MonoBehaviour
         return u * u * p0 + 2f * u * t * p1 + t * t * p2;
     }
 
+    private void OnDestroy()
+    {
+        // ì†Œìœ ìì˜ ê°œì¸ ì•„ì´í…œ ëª©ë¡ì—ì„œ ì œê±°
+        if (owner != null)
+        {
+            owner.GetComponent<UnitAI>()?.RemovePersonalItem(this);
+        }
+    }
+
     private void OnDrawGizmosSelected()
     {
         if (enableMagnet)
         {
             Gizmos.color = Color.cyan;
             Gizmos.DrawWireSphere(transform.position, magnetRadius);
+        }
+
+        // ì†Œìœ ê¶Œ í‘œì‹œ
+        if (!isPublic && owner != null)
+        {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawLine(transform.position, owner.transform.position);
         }
     }
 }

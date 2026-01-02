@@ -57,6 +57,8 @@ public class RemovingState : IBuildingState
 
         // 배치된 건물 찾기
         GameObject buildingToRemove = null;
+        Vector3Int originPosition = gridPosition; // 건물 원점 위치
+
         if (placedBuildings.TryGetValue(gridPosition, out buildingToRemove))
         {
             // Building 컴포넌트가 있으면 크기 정보 가져오기
@@ -66,13 +68,14 @@ public class RemovingState : IBuildingState
             if (building != null && building.Data != null)
             {
                 size = building.Data.Size;
+                originPosition = building.GridPosition; // 실제 원점 위치
 
                 // 모든 점유 셀에서 placedBuildings 제거
                 for (int x = 0; x < size.x; x++)
                 {
                     for (int y = 0; y < size.y; y++)
                     {
-                        Vector3Int cellPos = building.GridPosition + new Vector3Int(x, 0, y);
+                        Vector3Int cellPos = originPosition + new Vector3Int(x, 0, y);
                         placedBuildings.Remove(cellPos);
                     }
                 }
@@ -101,8 +104,15 @@ public class RemovingState : IBuildingState
             }
         }
 
-        // GridData에서 제거
+        // ★ GridData에서 제거 (PlacementSystem용)
         selectedData.RemoveObjectAt(gridPosition);
+
+        // ★ GridDataManager에서도 제거 (Unit 이동용) - 버그 수정!
+        if (GridDataManager.Instance != null)
+        {
+            GridDataManager.Instance.RemoveObject(originPosition);
+            Debug.Log($"[RemovingState] GridDataManager에서 제거: {originPosition}");
+        }
 
         Vector3 cellPosition = grid.CellToWorld(gridPosition);
         previewSystem.UpdatePosition(cellPosition, CheckIfSelectionIsValid(gridPosition));
