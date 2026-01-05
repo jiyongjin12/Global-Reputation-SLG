@@ -58,7 +58,7 @@ public class Building : MonoBehaviour
     /// <summary>
     /// ★ Task 위치 업데이트 (건물 이동 시 호출)
     /// - 건설 작업의 목표 위치를 새 위치로 변경
-    /// - 작업 중인 유닛들에게 새 위치로 이동하라고 알림
+    /// - 작업 중인 유닛들의 작업 위치도 재계산
     /// </summary>
     public void UpdateTaskLocation(Vector3 newWorldPosition)
     {
@@ -67,18 +67,29 @@ public class Building : MonoBehaviour
         // 1. TaskData의 위치 업데이트
         constructionTask.Data.TargetPosition = newWorldPosition;
 
-        // 2. 작업 중인 유닛들에게 새 위치로 이동하라고 알림
+        // 2. 건물 크기 가져오기
+        Vector2Int size = data?.Size ?? Vector2Int.one;
+
+        // 3. 작업 중인 유닛들의 작업 위치 업데이트
         foreach (var unit in constructionTask.AssignedUnits)
         {
             if (unit != null && unit.IsAlive)
             {
-                // 유닛을 새 위치로 이동시킴
-                unit.MoveTo(newWorldPosition);
-                Debug.Log($"[Building] {unit.UnitName}을(를) 새 위치로 이동시킴: {newWorldPosition}");
+                // ★ UnitAI의 작업 위치 재계산
+                var unitAI = unit.GetComponent<UnitAi>();
+                if (unitAI != null)
+                {
+                    unitAI.UpdateAssignedWorkPosition(newWorldPosition, size);
+                }
+                else
+                {
+                    // UnitAI 없으면 단순히 MoveTo
+                    unit.MoveTo(newWorldPosition);
+                }
             }
         }
 
-        Debug.Log($"[Building] {data?.Name} Task 위치 업데이트: {newWorldPosition}");
+        Debug.Log($"[Building] {data?.Name} Task 위치 업데이트: {newWorldPosition}, 유닛 {constructionTask.AssignedUnits.Count}명");
     }
 
     /// <summary>
@@ -96,7 +107,7 @@ public class Building : MonoBehaviour
         var taskData = new TaskData(TaskType.Construct, transform.position, gameObject)
         {
             Priority = TaskPriority.Normal,
-            MaxWorkers = Mathf.Clamp(data.Size.x * data.Size.y, 1, 3),
+            MaxWorkers = Mathf.Clamp(data.Size.x * data.Size.y + 1, 2, 4), // ★ 1x1=2명, 2x2=4명
             WorkRequired = data.ConstructionWorkRequired
         };
 
