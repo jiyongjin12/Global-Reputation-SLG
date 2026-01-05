@@ -33,9 +33,11 @@ public class PlacementSystem : MonoBehaviour
     // 배치된 건물 추적 (GridPosition -> GameObject)
     private Dictionary<Vector3Int, GameObject> placedBuildings = new Dictionary<Vector3Int, GameObject>();
 
+    // ★ 현재 배치 중인 오브젝트 크기 (중앙 보정용)
+    private Vector2Int currentPlacementSize = Vector2Int.one;
+
     // 이벤트
     public event Action<Building> OnBuildingPlaced;
-    public event Action<Building> OnBuildingMoved;
     public event Action<GameObject> OnBuildingRemoved;
     public event Action<string> OnPlacementFailed;
 
@@ -44,40 +46,6 @@ public class PlacementSystem : MonoBehaviour
         gridVisualization.SetActive(false);
         floorData = new();
         furnitureData = new();
-
-        // ★ GameInputManager 이벤트 연결
-        if (GameInputManager.Instance != null)
-        {
-            GameInputManager.Instance.OnActionTriggered += HandleGameAction;
-        }
-    }
-
-    private void OnDestroy()
-    {
-        // 이벤트 해제
-        if (GameInputManager.Instance != null)
-        {
-            GameInputManager.Instance.OnActionTriggered -= HandleGameAction;
-        }
-    }
-
-    /// <summary>
-    /// ★ GameInputManager에서 액션 처리
-    /// </summary>
-    private void HandleGameAction(GameAction action)
-    {
-        switch (action)
-        {
-            case GameAction.MoveBuilding:
-                if (buildingState == null) // 다른 모드가 아닐 때만
-                    StartMoving();
-                break;
-
-            case GameAction.DeleteBuilding:
-                if (buildingState == null)
-                    StartRemoving();
-                break;
-        }
     }
 
     public void StartPlacement(int ID)
@@ -104,7 +72,10 @@ public class PlacementSystem : MonoBehaviour
 
         gridVisualization.SetActive(true);
 
-        // GridDataManager 사용
+        // ★ 현재 배치 중인 오브젝트 크기 저장
+        currentPlacementSize = data.Size;
+
+        // 수정: GridDataManager 사용
         GridData envData = null;
         if (GridDataManager.Instance != null)
         {
@@ -130,15 +101,16 @@ public class PlacementSystem : MonoBehaviour
 
         inputManager.OnClicked += PlaceStructure;
         inputManager.OnExit += StopPlacement;
-
-        // ★ GameInputManager에 현재 모드 등록
-        GameInputManager.Instance?.SetCurrentMode(StopPlacement, 50);
     }
 
     public void StartRemoving()
     {
         StopPlacement();
         gridVisualization.SetActive(true);
+
+        // ★ 삭제 모드는 1x1
+        currentPlacementSize = Vector2Int.one;
+
         buildingState = new RemovingState(
             grid,
             preview,
@@ -150,38 +122,6 @@ public class PlacementSystem : MonoBehaviour
         );
         inputManager.OnClicked += PlaceStructure;
         inputManager.OnExit += StopPlacement;
-
-        // ★ GameInputManager에 현재 모드 등록
-        GameInputManager.Instance?.SetCurrentMode(StopPlacement, 50);
-
-        Debug.Log("[PlacementSystem] 삭제 모드 시작 (X키 또는 버튼)");
-    }
-
-    /// <summary>
-    /// ★ 건물 이동 모드 시작
-    /// </summary>
-    public void StartMoving()
-    {
-        StopPlacement();
-        gridVisualization.SetActive(true);
-
-        buildingState = new MovingState(
-            grid,
-            preview,
-            floorData,
-            furnitureData,
-            database,
-            placedBuildings,
-            OnBuildingMovedInternal
-        );
-
-        inputManager.OnClicked += PlaceStructure;
-        inputManager.OnExit += StopPlacement;
-
-        // ★ GameInputManager에 현재 모드 등록
-        GameInputManager.Instance?.SetCurrentMode(StopPlacement, 50);
-
-        Debug.Log("[PlacementSystem] 이동 모드 시작 (C키 또는 버튼)");
     }
 
     private void PlaceStructure()
@@ -191,12 +131,14 @@ public class PlacementSystem : MonoBehaviour
             return;
         }
         Vector3 mousePosition = inputManager.GetSelectedMapPosition();
-        Vector3Int gridPosition = grid.WorldToCell(mousePosition);
+
+        // ★ 중앙 보정 + 클램핑 적용
+        Vector3Int gridPosition = GetCenteredAndClampedGridPosition(mousePosition, currentPlacementSize);
 
         buildingState.OnAction(gridPosition);
     }
 
-    public void StopPlacement()
+    private void StopPlacement()
     {
         if (buildingState == null)
             return;
@@ -207,8 +149,8 @@ public class PlacementSystem : MonoBehaviour
         lastDetectedPosition = Vector3Int.zero;
         buildingState = null;
 
-        // ★ GameInputManager에서 현재 모드 해제
-        GameInputManager.Instance?.ClearCurrentMode();
+        // ★ 크기 초기화
+        currentPlacementSize = Vector2Int.one;
     }
 
     private void Update()
@@ -216,7 +158,10 @@ public class PlacementSystem : MonoBehaviour
         if (buildingState == null)
             return;
         Vector3 mousePosition = inputManager.GetSelectedMapPosition();
-        Vector3Int gridPosition = grid.WorldToCell(mousePosition);
+
+        // ★ 중앙 보정 + 클램핑 적용
+        Vector3Int gridPosition = GetCenteredAndClampedGridPosition(mousePosition, currentPlacementSize);
+
         if (lastDetectedPosition != gridPosition)
         {
             buildingState.UpdateState(gridPosition);
@@ -224,15 +169,82 @@ public class PlacementSystem : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// ★ 마우스 위치를 중앙 기준으로 보정하고, 맵 범위 내로 클램핑
+    /// </summary>
+    private Vector3Int GetCenteredAndClampedGridPosition(Vector3 mouseWorldPos, Vector2Int size)
+    {
+        // 크기별 중심점 계산:
+        // - 홀수 (1x1, 3x3): 중심이 셀 중앙 (0.5, 0.5 위치)
+        // - 짝수 (2x2, 4x4): 중심이 셀 교차점 (정수 위치)
+        //
+        // 예시:
+        // 1x1: 중심 = (0.5, 0.5) - 셀 한 칸의 중앙
+        // 2x2: 중심 = (1.0, 1.0) - 4칸 교차점
+        // 3x3: 중심 = (1.5, 1.5) - 가운데 셀의 중앙
+        // 4x4: 중심 = (2.0, 2.0) - 4칸 교차점
+
+        int originX, originZ;
+
+        // X축 계산
+        if (size.x % 2 == 0) // 짝수: 셀 교차점이 중심
+        {
+            int centerX = Mathf.RoundToInt(mouseWorldPos.x);
+            originX = centerX - size.x / 2;
+        }
+        else // 홀수: 셀 중앙이 중심 → 마우스가 있는 셀이 중심 셀
+        {
+            int centerCellX = Mathf.FloorToInt(mouseWorldPos.x);
+            originX = centerCellX - size.x / 2;
+        }
+
+        // Z축 계산
+        if (size.y % 2 == 0) // 짝수
+        {
+            int centerZ = Mathf.RoundToInt(mouseWorldPos.z);
+            originZ = centerZ - size.y / 2;
+        }
+        else // 홀수
+        {
+            int centerCellZ = Mathf.FloorToInt(mouseWorldPos.z);
+            originZ = centerCellZ - size.y / 2;
+        }
+
+        Vector3Int gridPos = new Vector3Int(originX, 0, originZ);
+
+        // 맵 범위 내로 클램핑
+        return ClampToMapBounds(gridPos, size);
+    }
+
+    /// <summary>
+    /// ★ 그리드 위치를 맵 범위 내로 클램핑
+    /// </summary>
+    private Vector3Int ClampToMapBounds(Vector3Int gridPos, Vector2Int size)
+    {
+        if (GridDataManager.Instance == null)
+            return gridPos;
+
+        // GridDataManager에서 맵 범위 가져오기
+        int cellCountX = GridDataManager.Instance.CellCountX;
+        int cellCountZ = GridDataManager.Instance.CellCountZ;
+
+        // 셀 인덱스로 변환
+        var (cellX, cellZ) = GridDataManager.Instance.GridPositionToCellIndex(gridPos);
+
+        // 클램핑: 오브젝트가 맵 안에 완전히 들어오도록
+        // 최소: 0, 최대: cellCount - size
+        int clampedCellX = Mathf.Clamp(cellX, 0, cellCountX - size.x);
+        int clampedCellZ = Mathf.Clamp(cellZ, 0, cellCountZ - size.y);
+
+        // 다시 그리드 좌표로 변환
+        Vector3Int clampedGridPos = GridDataManager.Instance.CellIndexToGridPosition(clampedCellX, clampedCellZ);
+
+        return clampedGridPos;
+    }
+
     private void OnBuildingPlacedInternal(Building building)
     {
         OnBuildingPlaced?.Invoke(building);
-    }
-
-    private void OnBuildingMovedInternal(Building building)
-    {
-        OnBuildingMoved?.Invoke(building);
-        Debug.Log($"[PlacementSystem] 건물 이동됨: {building?.name}");
     }
 
     private void OnBuildingRemovedInternal(GameObject removedObj)
@@ -252,9 +264,4 @@ public class PlacementSystem : MonoBehaviour
     {
         return placedBuildings.TryGetValue(gridPosition, out var obj) ? obj : null;
     }
-
-    /// <summary>
-    /// 현재 모드 활성화 여부
-    /// </summary>
-    public bool IsInBuildMode => buildingState != null;
 }
