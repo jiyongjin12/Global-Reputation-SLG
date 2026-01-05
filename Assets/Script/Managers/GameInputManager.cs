@@ -8,7 +8,8 @@ using UnityEngine;
 public enum GameAction
 {
     // UI 관련
-    OpenChat,           // 채팅 열기 (Enter)
+    OpenChat,           // 채팅 열기 (Enter) 
+    OpenBuilding,       // 건물UI 열기 아마도 B
     CloseUI,            // UI 닫기 / 취소 (ESC)
     OpenSettings,       // 설정 열기
 
@@ -21,6 +22,7 @@ public enum GameAction
     Pause,              // 일시정지 (P)
     QuickSave,          // 빠른 저장 (F5)
     QuickLoad,          // 빠른 로드 (F9)
+
 }
 
 /// <summary>
@@ -54,6 +56,7 @@ public class GameInputManager : MonoBehaviour
     private readonly Dictionary<GameAction, KeyCode> defaultBindings = new()
     {
         { GameAction.OpenChat, KeyCode.Return },
+        { GameAction.OpenBuilding, KeyCode.B },
         { GameAction.CloseUI, KeyCode.Escape },
         { GameAction.OpenSettings, KeyCode.Escape },
         { GameAction.MoveBuilding, KeyCode.C },

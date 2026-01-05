@@ -33,6 +33,30 @@ public class ObjectsDatabaseSO : ScriptableObject
     {
         return objectsData.Find(o => o.ID == id);
     }
+
+    /// <summary>
+    /// 특정 카테고리의 모든 건물 가져오기
+    /// </summary>
+    public List<ObjectData> GetObjectsByCategory(BuildingCategory category)
+    {
+        return objectsData.FindAll(o => o.Category == category);
+    }
+
+    /// <summary>
+    /// 모든 카테고리 가져오기 (데이터에 존재하는 것만)
+    /// </summary>
+    public List<BuildingCategory> GetAllCategories()
+    {
+        HashSet<BuildingCategory> categories = new HashSet<BuildingCategory>();
+        foreach (var obj in objectsData)
+        {
+            categories.Add(obj.Category);
+        }
+
+        List<BuildingCategory> result = new List<BuildingCategory>(categories);
+        result.Sort(); // enum 순서대로 정렬
+        return result;
+    }
 }
 
 [Serializable]
@@ -49,6 +73,18 @@ public class ObjectData
 
     [field: SerializeField]
     public BuildingType Type { get; private set; }
+
+    // ★ 새로 추가: 카테고리
+    [field: SerializeField]
+    public BuildingCategory Category { get; private set; } = BuildingCategory.General;
+
+    // ★ 새로 추가: UI용 아이콘
+    [field: SerializeField]
+    public Sprite Icon { get; private set; }
+
+    // ★ 새로 추가: 설명
+    [field: SerializeField, TextArea(2, 4)]
+    public string Description { get; private set; }
 
     [Header("Prefabs")]
     [field: SerializeField]
@@ -67,4 +103,8 @@ public class ObjectData
     [Header("Functionality")]
     [field: SerializeField]
     public int MaxUnitCapacity { get; private set; } = 0;
+
+    // ★ 새로 추가: UI에 표시할지 여부 (Floor 등 숨길 건물용)
+    [field: SerializeField]
+    public bool ShowInBuildMenu { get; private set; } = true;
 }
