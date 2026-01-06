@@ -164,20 +164,22 @@ public class BuildingButton : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
         int costCount = buildingData.ConstructionCosts?.Length ?? 0;
 
-        if (costCount <= 2)
-            return; // 2개 이하는 조정 불필요
-
-        // 3개 이상이면 스케일 축소
+        // 개수에 따른 스케일 결정
         float scale = costCount switch
         {
-            3 => 0.85f,
-            4 => 0.75f,
-            _ => 0.65f
+            0 => 1f,
+            1 => 1f,
+            2 => 1f,      // 2개까지는 기본 크기
+            3 => 0.8f,    // 3개면 80%
+            4 => 0.7f,    // 4개면 70%
+            _ => 0.6f     // 5개 이상이면 60%
         };
 
-        foreach (Transform child in costContainer)
+        // 각 CostItemUI에 스케일 적용
+        CostItemUI[] costItems = costContainer.GetComponentsInChildren<CostItemUI>();
+        foreach (var item in costItems)
         {
-            child.localScale = Vector3.one * scale;
+            item.SetScale(scale);
         }
     }
 

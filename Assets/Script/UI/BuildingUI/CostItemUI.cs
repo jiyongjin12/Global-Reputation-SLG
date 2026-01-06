@@ -6,6 +6,7 @@ using TMPro;
 /// 가격 아이템 UI
 /// - 자원 아이콘 + 수량 표시
 /// - 자원 부족 시 빨간색 표시
+/// - ★ 개수에 따른 크기 조절 지원
 /// </summary>
 public class CostItemUI : MonoBehaviour
 {
@@ -13,11 +14,25 @@ public class CostItemUI : MonoBehaviour
     [SerializeField] private Image resourceIcon;
     [SerializeField] private TextMeshProUGUI amountText;
 
+    [Header("Size Settings (기본값)")]
+    [SerializeField] private float defaultIconSize = 24f;
+    [SerializeField] private float defaultFontSize = 16f;
+
     [Header("Colors")]
     [SerializeField] private Color normalColor = Color.white;
     [SerializeField] private Color insufficientColor = new Color(1f, 0.3f, 0.3f, 1f);
 
     private ResourceCost costData;
+    private RectTransform iconRectTransform;
+
+    private void Awake()
+    {
+        // 아이콘 RectTransform 가져오기
+        if (resourceIcon != null)
+        {
+            iconRectTransform = resourceIcon.GetComponent<RectTransform>();
+        }
+    }
 
     /// <summary>
     /// 초기화
@@ -26,55 +41,74 @@ public class CostItemUI : MonoBehaviour
     {
         costData = cost;
 
-        Debug.Log($"[CostItemUI] Initialize 호출됨");
-        Debug.Log($"[CostItemUI] cost null? {cost == null}");
-
         if (cost == null)
         {
             Debug.LogError("[CostItemUI] cost가 null입니다!");
             return;
         }
 
-        Debug.Log($"[CostItemUI] cost.Resource null? {cost.Resource == null}");
-
-        if (cost.Resource != null)
+        // 아이콘 설정
+        if (resourceIcon != null && cost.Resource != null)
         {
-            Debug.Log($"[CostItemUI] Resource: {cost.Resource.ResourceName}, Amount: {cost.Amount}");
-            Debug.Log($"[CostItemUI] Resource.Icon null? {cost.Resource.Icon == null}");
-        }
-
-        // 아이콘 설정 (ResourceItemSO에서 가져옴)
-        if (resourceIcon != null)
-        {
-            if (cost.Resource != null && cost.Resource.Icon != null)
+            if (cost.Resource.Icon != null)
             {
                 resourceIcon.sprite = cost.Resource.Icon;
                 resourceIcon.enabled = true;
-                Debug.Log($"[CostItemUI] 아이콘 설정 완료: {cost.Resource.Icon.name}");
             }
             else
             {
-                Debug.LogWarning("[CostItemUI] 아이콘이 없습니다! ResourceItemSO에 Icon을 설정하세요.");
+                Debug.LogWarning($"[CostItemUI] {cost.Resource.ResourceName}의 아이콘이 없습니다!");
             }
-        }
-        else
-        {
-            Debug.LogError("[CostItemUI] resourceIcon 참조가 없습니다! Inspector에서 연결하세요.");
         }
 
         // 수량 텍스트
         if (amountText != null)
         {
             amountText.text = cost.Amount.ToString();
-            Debug.Log($"[CostItemUI] 수량 텍스트 설정: {cost.Amount}");
-        }
-        else
-        {
-            Debug.LogError("[CostItemUI] amountText 참조가 없습니다! Inspector에서 연결하세요.");
         }
 
         // 자원 체크
         UpdateAffordability();
+    }
+
+    /// <summary>
+    /// ★ 크기 조절 (개수에 따라 호출됨)
+    /// </summary>
+    /// <param name="scale">0.5 ~ 1.0 (1.0 = 기본 크기)</param>
+    public void SetScale(float scale)
+    {
+        scale = Mathf.Clamp(scale, 0.5f, 1f);
+
+        // 아이콘 크기 조절
+        if (iconRectTransform != null)
+        {
+            float iconSize = defaultIconSize * scale;
+            iconRectTransform.sizeDelta = new Vector2(iconSize, iconSize);
+        }
+
+        // 폰트 크기 조절
+        if (amountText != null)
+        {
+            amountText.fontSize = defaultFontSize * scale;
+        }
+    }
+
+    /// <summary>
+    /// ★ 직접 크기 지정
+    /// </summary>
+    public void SetSize(float iconSize, float fontSize)
+    {
+        // 아이콘 크기
+        if (iconRectTransform != null)
+        {
+            iconRectTransform.sizeDelta = new Vector2(iconSize, iconSize);
+        }
+
+        // 폰트 크기
+        if (amountText != null)
+        {
+            amountText.fontSize = fontSize;
+        }
     }
 
     /// <summary>

@@ -58,5 +58,7 @@ MonoBehaviour:
       <Amount>k__BackingField: 15
     - <Resource>k__BackingField: {fileID: 11400000, guid: 07793162378ff2347ba23d12b899f785, type: 2}
       <Amount>k__BackingField: 8
+    - <Resource>k__BackingField: {fileID: 11400000, guid: 07793162378ff2347ba23d12b899f785, type: 2}
+      <Amount>k__BackingField: 8
     <MaxUnitCapacity>k__BackingField: 0
     <ShowInBuildMenu>k__BackingField: 1
