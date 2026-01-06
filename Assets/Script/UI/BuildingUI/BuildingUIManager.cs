@@ -14,6 +14,7 @@ using DG.Tweening;
 /// - ★ IEscapableUI 구현: GameInputManager 연동
 /// - ★ DOTween 슬라이드 애니메이션
 /// - ★ TimeScale 조절 + Depth of Field 블러
+/// - ★ 컬트오브더램 스타일 카드 애니메이션
 /// </summary>
 public class BuildingUIManager : MonoBehaviour, IEscapableUI
 {
@@ -25,6 +26,7 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
     [SerializeField] private GameObject buildingPanel;           // ★ GameObject로 유지 (기존 연결 호환)
     [SerializeField] private Transform contentParent;            // Scroll Rect의 Content
     [SerializeField] private ScrollRect scrollRect;
+    [SerializeField] private BuildingInfoPanel infoPanel;        // ★ 건물 정보 패널 (카드)
 
     // 내부에서 사용할 RectTransform
     private RectTransform panelRectTransform;
@@ -43,6 +45,10 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
     [SerializeField] private float openedPosX = 0f;              // 열린 상태 X 위치
     [SerializeField] private float slideDuration = 0.4f;         // 슬라이드 애니메이션 시간
     [SerializeField] private Ease slideEase = Ease.OutQuart;     // 슬라이드 이징
+
+    [Header("=== 카드 페이드인 설정 ===")]
+    [SerializeField] private float cardFadeInDelay = 0.02f;      // 카드 간 딜레이
+    [SerializeField] private float cardFadeInStartDelay = 0.1f;  // 첫 카드 딜레이
 
     [Header("=== 게임 속도 설정 ===")]
     [SerializeField] private float slowTimeScale = 0.05f;        // 열렸을 때 게임 속도
@@ -66,6 +72,9 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
     private List<BuildingButton> allButtons = new List<BuildingButton>();
     private int selectedIndex = 0;
     private bool isOpen = false;
+
+    // 마우스 상태 (마우스 우선 선택용)
+    private bool isMouseOverButton = false;
 
     // 현재 배치 중 상태
     private bool isPlacing = false;
@@ -250,7 +259,7 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
     // ==================== 열기/닫기 (애니메이션) ====================
 
     /// <summary>
-    /// UI 열기 (슬라이드 애니메이션 + 시간 느려짐)
+    /// UI 열기 (슬라이드 애니메이션 + 시간 느려짐 + 카드 페이드인)
     /// </summary>
     public void Open()
     {
@@ -269,8 +278,13 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
         // 첫 번째 버튼 선택
         if (allButtons.Count > 0)
         {
-            SelectButton(0);
+            selectedIndex = 0;
+            allButtons[0].SetSelected(true);
+            UpdateInfoPanel();  // ★ 카드 애니메이션은 여기서 처리됨
         }
+
+        // ★ 버튼들 페이드인 애니메이션
+        PlayAllCardsFadeIn();
 
         // ===== 애니메이션 시작 =====
 
@@ -306,6 +320,20 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
     }
 
     /// <summary>
+    /// ★ 버튼들 페이드인 애니메이션
+    /// </summary>
+    private void PlayAllCardsFadeIn()
+    {
+        Debug.Log($"[BuildingUIManager] PlayAllCardsFadeIn 호출, 버튼 수: {allButtons.Count}");
+
+        for (int i = 0; i < allButtons.Count; i++)
+        {
+            float delay = cardFadeInStartDelay + (i * cardFadeInDelay);
+            allButtons[i].PlayFadeInAnimation(delay);
+        }
+    }
+
+    /// <summary>
     /// UI 닫기 (슬라이드 애니메이션 + 시간 복구)
     /// </summary>
     public void Close()
@@ -318,6 +346,10 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
 
         // 선택 해제
         DeselectAll();
+
+        // ★ 정보 패널(카드) 숨기기
+        if (infoPanel != null)
+            infoPanel.Hide();
 
         // ===== 애니메이션 시작 =====
 
@@ -451,22 +483,32 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
     /// </summary>
     private void HandleNavigationInput()
     {
+        // 마우스가 버튼 위에 있으면 키보드 네비게이션 무시 (마우스 우선)
+        if (isMouseOverButton)
+            return;
+
         // 방향키 네비게이션
+        bool moved = false;
+
         if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
         {
-            SelectButton(selectedIndex + 1);
+            SelectButtonByKeyboard(selectedIndex + 1);
+            moved = true;
         }
         else if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
         {
-            SelectButton(selectedIndex - 1);
+            SelectButtonByKeyboard(selectedIndex - 1);
+            moved = true;
         }
         else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
         {
-            SelectButton(selectedIndex + GetColumnsPerRow());
+            SelectButtonByKeyboard(selectedIndex + GetColumnsPerRow());
+            moved = true;
         }
         else if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
         {
-            SelectButton(selectedIndex - GetColumnsPerRow());
+            SelectButtonByKeyboard(selectedIndex - GetColumnsPerRow());
+            moved = true;
         }
 
         // Enter/Space로 선택
@@ -478,21 +520,25 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
             }
         }
 
-        // 마우스 스크롤
-        float scroll = Input.GetAxis("Mouse ScrollWheel");
-        if (Mathf.Abs(scroll) > 0.01f && scrollRect != null)
-        {
-            scrollRect.verticalNormalizedPosition += scroll * 0.1f;
-        }
+        // 마우스 스크롤 (ScrollRect가 자체 처리하므로 제거)
+        // ScrollRect의 Scroll Sensitivity 설정으로 조절
     }
 
-    private void SelectButton(int index)
+    /// <summary>
+    /// 키보드로 버튼 선택 (스크롤 이동 포함)
+    /// </summary>
+    private void SelectButtonByKeyboard(int index)
     {
         if (allButtons.Count == 0)
             return;
 
         index = Mathf.Clamp(index, 0, allButtons.Count - 1);
 
+        // 같은 버튼이면 무시
+        if (index == selectedIndex)
+            return;
+
+        // 이전 선택 해제
         if (selectedIndex >= 0 && selectedIndex < allButtons.Count)
         {
             allButtons[selectedIndex].SetSelected(false);
@@ -501,7 +547,69 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
         selectedIndex = index;
         allButtons[selectedIndex].SetSelected(true);
 
+        // 키보드 이동 시에만 스크롤 따라가기
         EnsureButtonVisible(allButtons[selectedIndex]);
+
+        // ★ 정보 패널(카드) 업데이트 - 여기서 카드 애니메이션 처리됨
+        UpdateInfoPanel();
+    }
+
+    /// <summary>
+    /// 마우스로 버튼 선택 (스크롤 이동 없음)
+    /// </summary>
+    private void SelectButtonByMouse(int index)
+    {
+        if (allButtons.Count == 0)
+            return;
+
+        index = Mathf.Clamp(index, 0, allButtons.Count - 1);
+
+        // 같은 버튼이면 무시
+        if (index == selectedIndex)
+            return;
+
+        // 이전 선택 해제
+        if (selectedIndex >= 0 && selectedIndex < allButtons.Count)
+        {
+            allButtons[selectedIndex].SetSelected(false);
+        }
+
+        selectedIndex = index;
+        allButtons[selectedIndex].SetSelected(true);
+
+        // 마우스 선택 시에는 스크롤 이동 안 함!
+
+        // ★ 정보 패널(카드) 업데이트 - 여기서 카드 애니메이션 처리됨
+        UpdateInfoPanel();
+    }
+
+    private void SelectButton(int index)
+    {
+        SelectButtonByMouse(index);
+    }
+
+    /// <summary>
+    /// ★ 정보 패널(카드) 업데이트
+    /// </summary>
+    private void UpdateInfoPanel(ObjectData building = null)
+    {
+        if (infoPanel == null)
+            return;
+
+        // 파라미터가 없으면 현재 선택된 건물 사용
+        if (building == null && selectedIndex >= 0 && selectedIndex < allButtons.Count)
+        {
+            building = allButtons[selectedIndex].BuildingData;
+        }
+
+        if (building != null)
+        {
+            infoPanel.ShowBuilding(building);
+        }
+        else
+        {
+            infoPanel.Hide();
+        }
     }
 
     private void DeselectAll()
@@ -510,6 +618,7 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
         {
             button.SetSelected(false);
         }
+        selectedIndex = -1;
     }
 
     private void EnsureButtonVisible(BuildingButton button)
@@ -569,7 +678,16 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
 
     private void OnBuildingButtonHovered(int index)
     {
-        SelectButton(index);
+        isMouseOverButton = true;
+        SelectButtonByMouse(index);
+    }
+
+    /// <summary>
+    /// 마우스가 버튼에서 나갔을 때 호출
+    /// </summary>
+    public void OnBuildingButtonUnhovered()
+    {
+        isMouseOverButton = false;
     }
 
     private void StartPlacing(int buildingID)

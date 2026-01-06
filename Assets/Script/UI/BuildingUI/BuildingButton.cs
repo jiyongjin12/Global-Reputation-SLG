@@ -11,10 +11,12 @@ using DG.Tweening;
 /// - 가격 표시 (CostItemUI 사용)
 /// - 호버/선택 시 확대 효과
 /// - 자원 부족 시 비활성화 표시
+/// - ★ 컬트오브더램 스타일 카드 애니메이션
 /// </summary>
 public class BuildingButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
     [Header("UI References")]
+    [SerializeField] private RectTransform cardContent;             // ★ 스케일/페이드 애니메이션 대상
     [SerializeField] private Image iconImage;
     [SerializeField] private Image backgroundImage;
     [SerializeField] private Image borderImage;
@@ -25,11 +27,11 @@ public class BuildingButton : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     [Header("Cost Prefab")]
     [SerializeField] private GameObject costItemPrefab;          // 가격 아이템 프리팹
 
-    [Header("Hover Settings")]
+    [Header("Scale Settings")]
     [SerializeField] private float normalScale = 1f;
-    [SerializeField] private float hoverScale = 1.15f;
     [SerializeField] private float selectedScale = 1.1f;
-    [SerializeField] private float scaleDuration = 0.15f;
+    [SerializeField] private float deselectedScale = 1.15f;      // 선택 해제 시 커지는 크기
+    [SerializeField] private float scaleDuration = 0.1f;
 
     [Header("Colors")]
     [SerializeField] private Color normalBorderColor = new Color(0.3f, 0.3f, 0.3f, 1f);
@@ -37,11 +39,14 @@ public class BuildingButton : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     [SerializeField] private Color selectedBorderColor = new Color(1f, 0.8f, 0.2f, 1f);
     [SerializeField] private Color cannotAffordColor = new Color(0.5f, 0.5f, 0.5f, 0.7f);
 
+    [Header("Card Animation")]
+    [SerializeField] private float fadeInDuration = 0.2f;        // 처음 나타날 때
+    [SerializeField] private float transitionDuration = 0.1f;    // 선택 변경 시
+
     // 내부 상태
     private ObjectData buildingData;
     private int buttonIndex;
     private bool isSelected = false;
-    private bool isHovered = false;
     private bool canAfford = true;
 
     // 콜백
@@ -49,16 +54,36 @@ public class BuildingButton : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     private Action<int> onHoverCallback;
 
     private RectTransform rectTransform;
+    private CanvasGroup canvasGroup;
     private Tween scaleTween;
+    private Tween fadeTween;
+
+    public ObjectData BuildingData => buildingData;
 
     private void Awake()
     {
         rectTransform = GetComponent<RectTransform>();
+
+        // ★ cardContent가 있으면 거기서 CanvasGroup 가져오기
+        if (cardContent != null)
+        {
+            canvasGroup = cardContent.GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+                canvasGroup = cardContent.gameObject.AddComponent<CanvasGroup>();
+        }
+        else
+        {
+            // cardContent가 없으면 자기 자신 사용 (하위 호환)
+            canvasGroup = GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+        }
     }
 
     private void OnDestroy()
     {
         scaleTween?.Kill();
+        fadeTween?.Kill();
     }
 
     /// <summary>
@@ -288,41 +313,175 @@ public class BuildingButton : MonoBehaviour, IPointerEnterHandler, IPointerExitH
     }
 
     /// <summary>
-    /// 선택 상태 설정
+    /// 선택 상태 설정 (애니메이션 포함)
     /// </summary>
     public void SetSelected(bool selected)
     {
+        bool wasSelected = isSelected;
         isSelected = selected;
-        UpdateVisual();
+
+        Debug.Log($"[BuildingButton] SetSelected: {buildingData?.Name}, wasSelected={wasSelected}, selected={selected}");
+
+        // 선택 변경 시 애니메이션
+        if (wasSelected && !selected)
+        {
+            // 선택 해제: 커지면서 투명해짐
+            Debug.Log($"[BuildingButton] PlayDeselectAnimation: {buildingData?.Name}");
+            PlayDeselectAnimation();
+        }
+        else if (!wasSelected && selected)
+        {
+            // 새로 선택: 커진상태+투명 → 원래크기+불투명
+            Debug.Log($"[BuildingButton] PlaySelectAnimation: {buildingData?.Name}");
+            PlaySelectAnimation();
+        }
+        else
+        {
+            // 변경 없음: 즉시 적용
+            UpdateVisualImmediate();
+        }
     }
 
     /// <summary>
-    /// 시각 효과 업데이트
+    /// 선택 애니메이션 (커진상태+투명 → 원래크기+불투명)
     /// </summary>
-    private void UpdateVisual()
+    private void PlaySelectAnimation()
+    {
+        if (canvasGroup == null)
+        {
+            Debug.LogError($"[BuildingButton] CanvasGroup이 null! {buildingData?.Name}");
+            return;
+        }
+
+        scaleTween?.Kill();
+        fadeTween?.Kill();
+
+        // 애니메이션 대상 (cardContent가 있으면 cardContent, 없으면 자기 자신)
+        Transform animTarget = cardContent != null ? cardContent : transform;
+
+        // 시작: 크고 투명
+        animTarget.localScale = Vector3.one * deselectedScale;
+        canvasGroup.alpha = 0.3f;
+
+        Debug.Log($"[BuildingButton] SelectAnim 시작: scale={deselectedScale}, alpha=0.3");
+
+        // 종료: 선택 크기 + 불투명
+        scaleTween = animTarget.DOScale(selectedScale, transitionDuration)
+            .SetEase(Ease.OutQuad)
+            .SetUpdate(true);
+
+        fadeTween = canvasGroup.DOFade(1f, transitionDuration)
+            .SetEase(Ease.OutQuad)
+            .SetUpdate(true);
+
+        // 테두리
+        if (borderImage != null)
+            borderImage.color = selectedBorderColor;
+    }
+
+    /// <summary>
+    /// 선택 해제 애니메이션 (원래크기 → 커지면서 투명)
+    /// </summary>
+    private void PlayDeselectAnimation()
+    {
+        if (canvasGroup == null)
+        {
+            Debug.LogError($"[BuildingButton] CanvasGroup이 null! {buildingData?.Name}");
+            return;
+        }
+
+        scaleTween?.Kill();
+        fadeTween?.Kill();
+
+        // 애니메이션 대상
+        Transform animTarget = cardContent != null ? cardContent : transform;
+
+        Debug.Log($"[BuildingButton] DeselectAnim 시작");
+
+        // 커지면서 투명
+        Sequence seq = DOTween.Sequence();
+        seq.Append(animTarget.DOScale(deselectedScale, transitionDuration * 0.5f)
+            .SetEase(Ease.OutQuad));
+        seq.Join(canvasGroup.DOFade(0.5f, transitionDuration * 0.5f)
+            .SetEase(Ease.OutQuad));
+
+        // 다시 원래대로
+        seq.Append(animTarget.DOScale(normalScale, transitionDuration * 0.5f)
+            .SetEase(Ease.OutQuad));
+        seq.Join(canvasGroup.DOFade(1f, transitionDuration * 0.5f)
+            .SetEase(Ease.OutQuad));
+
+        seq.SetUpdate(true);
+        scaleTween = seq;
+
+        // 테두리
+        if (borderImage != null)
+            borderImage.color = normalBorderColor;
+    }
+
+    /// <summary>
+    /// 즉시 시각 효과 적용 (애니메이션 없음)
+    /// </summary>
+    private void UpdateVisualImmediate()
     {
         // 테두리 색상
         if (borderImage != null)
         {
-            if (isSelected)
-                borderImage.color = selectedBorderColor;
-            else if (isHovered)
-                borderImage.color = hoverBorderColor;
-            else
-                borderImage.color = normalBorderColor;
+            borderImage.color = isSelected ? selectedBorderColor : normalBorderColor;
         }
 
-        // 스케일 애니메이션
-        float targetScale = normalScale;
-        if (isSelected)
-            targetScale = selectedScale;
-        else if (isHovered)
-            targetScale = hoverScale;
+        // 애니메이션 대상
+        Transform animTarget = cardContent != null ? cardContent : transform;
+
+        // 스케일
+        animTarget.localScale = Vector3.one * (isSelected ? selectedScale : normalScale);
+
+        if (canvasGroup != null)
+            canvasGroup.alpha = 1f;
+    }
+
+    /// <summary>
+    /// ★ UI 열릴 때 페이드인 애니메이션
+    /// </summary>
+    public void PlayFadeInAnimation(float delay)
+    {
+        if (canvasGroup == null)
+        {
+            Debug.LogError($"[BuildingButton] PlayFadeIn - CanvasGroup null!");
+            return;
+        }
+
+        Debug.Log($"[BuildingButton] PlayFadeInAnimation: {buildingData?.Name}, delay={delay}");
 
         scaleTween?.Kill();
-        scaleTween = transform.DOScale(targetScale, scaleDuration)
+        fadeTween?.Kill();
+
+        // 애니메이션 대상
+        Transform animTarget = cardContent != null ? cardContent : transform;
+
+        // 시작: 투명 + 약간 작음
+        canvasGroup.alpha = 0f;
+        animTarget.localScale = Vector3.one * 0.8f;
+
+        // 페이드인 + 스케일업
+        fadeTween = canvasGroup.DOFade(1f, fadeInDuration)
+            .SetDelay(delay)
+            .SetEase(Ease.OutQuad)
+            .SetUpdate(true);
+
+        float targetScale = isSelected ? selectedScale : normalScale;
+        scaleTween = animTarget.DOScale(targetScale, fadeInDuration)
+            .SetDelay(delay)
             .SetEase(Ease.OutBack)
-            .SetUpdate(true); // TimeScale 영향 안 받음
+            .SetUpdate(true);
+    }
+
+    /// <summary>
+    /// 시각 효과 업데이트 (호환성용)
+    /// </summary>
+    private void UpdateVisual()
+    {
+        UpdateVisualImmediate();
     }
 
     /// <summary>
@@ -358,21 +517,21 @@ public class BuildingButton : MonoBehaviour, IPointerEnterHandler, IPointerExitH
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        isHovered = true;
-        UpdateVisual();
+        // 마우스가 버튼 위에 들어오면 선택 콜백 호출 (isHovered 제거)
         onHoverCallback?.Invoke(buttonIndex);
     }
 
     public void OnPointerExit(PointerEventData eventData)
     {
-        isHovered = false;
-        UpdateVisual();
+        // 마우스가 버튼에서 나가면 매니저에 알림
+        if (BuildingUIManager.Instance != null)
+        {
+            BuildingUIManager.Instance.OnBuildingButtonUnhovered();
+        }
     }
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        Debug.Log($"[BuildingButton] OnPointerClick 호출됨: {buildingData?.Name}, button={eventData.button}");
-
         if (eventData.button == PointerEventData.InputButton.Left)
         {
             OnClick();

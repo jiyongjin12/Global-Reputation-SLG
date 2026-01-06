@@ -32,7 +32,7 @@ MonoBehaviour:
     <Type>k__BackingField: 2
     <Category>k__BackingField: 0
     <Icon>k__BackingField: {fileID: 21300000, guid: 1d873c6f15219fc42a6f1f6e6b2b030f, type: 3}
-    <Description>k__BackingField: 
+    <Description>k__BackingField: 1x1  1x1  1x1  1x1  box  box  box  box
     <Prefab>k__BackingField: {fileID: 304060444072501163, guid: 5884f8195e1071c4495f129529d490bc, type: 3}
     <BlueprintPrefab>k__BackingField: {fileID: 6308579638950253088, guid: f2615be15e81ba349854ae6c08f7f760, type: 3}
     <ConstructionWorkRequired>k__BackingField: 35
@@ -49,7 +49,7 @@ MonoBehaviour:
     <Type>k__BackingField: 1
     <Category>k__BackingField: 1
     <Icon>k__BackingField: {fileID: 21300000, guid: 1d873c6f15219fc42a6f1f6e6b2b030f, type: 3}
-    <Description>k__BackingField: 
+    <Description>k__BackingField: "\uC124\uBA85 \uC124\uBA85 \uC124\uBA85 \uC124\uBA85"
     <Prefab>k__BackingField: {fileID: 1423105183262909642, guid: d5c95d3d870d6764189e07d83d55ab2b, type: 3}
     <BlueprintPrefab>k__BackingField: {fileID: 5633613124028220626, guid: a04bcfc2b297c3e44b4719ca6f67a58b, type: 3}
     <ConstructionWorkRequired>k__BackingField: 50
