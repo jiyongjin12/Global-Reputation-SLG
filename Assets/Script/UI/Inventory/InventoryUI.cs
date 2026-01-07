@@ -1,42 +1,44 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using DG.Tweening;
 
 /// <summary>
-/// 인벤토리 UI (ResourceManager 데이터 표시)
-/// - 그리드 형태로 보유 자원 표시
-/// - 자원 변경 시 자동 갱신
+/// 인벤토리 UI (Cult of the Lamb 스타일)
+/// - 카테고리별 Box 동적 생성
+/// - 아이템 개수에 따라 크기 자동 조절
 /// </summary>
 public class InventoryUI : MonoBehaviour
 {
     [Header("=== UI References ===")]
-    [SerializeField] private GameObject inventoryPanel;          // 인벤토리 패널
-    [SerializeField] private Transform slotContainer;            // 슬롯들이 들어갈 컨테이너
-    [SerializeField] private GameObject slotPrefab;              // InventorySlotUI 프리팹
+    [SerializeField] private GameObject inventoryPanel;          // 전체 패널
+    [SerializeField] private Transform contentParent;            // ScrollView의 Content
+    [SerializeField] private InventoryInfoPanel infoPanel;       // 아이템 정보 패널 (우측)
 
-    [Header("=== Settings ===")]
-    [SerializeField] private bool showEmptySlots = false;        // 0개인 자원도 표시할지
-    [SerializeField] private SortType sortType = SortType.Category;
+    [Header("=== Prefabs ===")]
+    [SerializeField] private GameObject categoryBoxPrefab;       // CategoryBox 프리팹
+    [SerializeField] private GameObject itemSlotPrefab;          // ItemSlot 프리팹
 
     [Header("=== Animation ===")]
     [SerializeField] private float fadeInDuration = 0.2f;
     [SerializeField] private CanvasGroup canvasGroup;
 
-    public enum SortType
-    {
-        Category,       // 카테고리순
-        Name,           // 이름순
-        Amount          // 수량순 (많은 순)
-    }
+    // 카테고리별 Box (Category -> CategoryBox)
+    private Dictionary<ResourceCategory, InventoryCategoryBox> categoryBoxes = new Dictionary<ResourceCategory, InventoryCategoryBox>();
 
-    // 생성된 슬롯들 (resourceID -> SlotUI)
+    // 전체 슬롯 (resourceID -> SlotUI)
     private Dictionary<int, InventorySlotUI> slotDict = new Dictionary<int, InventorySlotUI>();
+
+    // 현재 선택된 슬롯
+    private InventorySlotUI selectedSlot;
+    private int selectedIndex = -1;
     private List<InventorySlotUI> allSlots = new List<InventorySlotUI>();
 
     private bool isOpen = false;
 
     public static InventoryUI Instance { get; private set; }
+    public bool IsOpen => isOpen;
 
     private void Awake()
     {
@@ -62,7 +64,6 @@ public class InventoryUI : MonoBehaviour
 
     private void OnDestroy()
     {
-        // 이벤트 해제
         if (ResourceManager.Instance != null)
         {
             ResourceManager.Instance.OnInventoryChanged -= RefreshUI;
@@ -72,21 +73,18 @@ public class InventoryUI : MonoBehaviour
 
     private void Update()
     {
-        // I키로 열기/닫기 (임시 - 나중에 InputManager로 이동)
-        if (Input.GetKeyDown(KeyCode.I))
-        {
-            Toggle();
-        }
+        if (!isOpen) return;
+
+        // 키보드 네비게이션
+        HandleNavigation();
     }
 
     // ==================== 열기/닫기 ====================
 
     public void Toggle()
     {
-        if (isOpen)
-            Close();
-        else
-            Open();
+        if (isOpen) Close();
+        else Open();
     }
 
     public void Open()
@@ -96,10 +94,16 @@ public class InventoryUI : MonoBehaviour
 
         inventoryPanel.SetActive(true);
 
-        // UI 갱신
+        // UI 생성/갱신
         RefreshUI();
 
-        // 페이드인 애니메이션
+        // 첫 번째 아이템 선택
+        if (allSlots.Count > 0)
+        {
+            SelectSlot(0);
+        }
+
+        // 페이드인
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 0f;
@@ -113,6 +117,13 @@ public class InventoryUI : MonoBehaviour
     {
         if (!isOpen) return;
         isOpen = false;
+
+        // 선택 해제
+        DeselectAll();
+
+        // 정보 패널 숨기기
+        if (infoPanel != null)
+            infoPanel.Hide();
 
         if (canvasGroup != null)
         {
@@ -128,7 +139,7 @@ public class InventoryUI : MonoBehaviour
         Debug.Log("[InventoryUI] 닫힘");
     }
 
-    // ==================== UI 갱신 ====================
+    // ==================== UI 생성/갱신 ====================
 
     /// <summary>
     /// 전체 UI 갱신
@@ -138,36 +149,44 @@ public class InventoryUI : MonoBehaviour
         if (ResourceManager.Instance == null)
             return;
 
-        // 정렬된 자원 목록 가져오기
-        List<StoredResource> resources = GetSortedResources();
+        // 기존 정리
+        ClearAll();
 
-        // 기존 슬롯 정리
-        ClearAllSlots();
+        // 카테고리별로 아이템 분류
+        var resources = ResourceManager.Instance.GetOwnedResources();
+        var grouped = resources.GroupBy(r => r.Item.Category)
+                               .OrderBy(g => g.Key);  // 카테고리 순서대로
 
-        // 슬롯 생성
-        foreach (var stored in resources)
+        foreach (var group in grouped)
         {
-            if (!showEmptySlots && stored.Amount <= 0)
-                continue;
+            // 카테고리 Box 생성
+            var categoryBox = CreateCategoryBox(group.Key);
 
-            CreateOrUpdateSlot(stored);
+            // 해당 카테고리의 아이템들 생성
+            foreach (var stored in group.OrderBy(r => r.Item.ResourceName))
+            {
+                CreateItemSlot(categoryBox, stored);
+            }
         }
+
+        // Layout 갱신
+        Canvas.ForceUpdateCanvases();
+        LayoutRebuilder.ForceRebuildLayoutImmediate(contentParent as RectTransform);
     }
 
     /// <summary>
-    /// 특정 자원만 갱신 (최적화)
+    /// 특정 자원만 갱신
     /// </summary>
     private void OnResourceChanged(int resourceID, int newAmount)
     {
         if (!isOpen) return;
 
-        // 해당 슬롯만 업데이트
         if (slotDict.TryGetValue(resourceID, out var slot))
         {
-            if (newAmount <= 0 && !showEmptySlots)
+            if (newAmount <= 0)
             {
-                // 0개가 되면 슬롯 제거
-                RemoveSlot(resourceID);
+                // 0개가 되면 전체 갱신 (Box 정리 필요)
+                RefreshUI();
             }
             else
             {
@@ -176,90 +195,159 @@ public class InventoryUI : MonoBehaviour
         }
         else if (newAmount > 0)
         {
-            // 새 자원이면 전체 갱신 (정렬 때문에)
+            // 새 아이템이면 전체 갱신
             RefreshUI();
         }
     }
 
     /// <summary>
-    /// 정렬된 자원 목록 가져오기
+    /// 카테고리 Box 생성
     /// </summary>
-    private List<StoredResource> GetSortedResources()
+    private InventoryCategoryBox CreateCategoryBox(ResourceCategory category)
     {
-        var rm = ResourceManager.Instance;
+        if (categoryBoxes.TryGetValue(category, out var existing))
+            return existing;
 
-        switch (sortType)
+        if (categoryBoxPrefab == null || contentParent == null)
+            return null;
+
+        GameObject boxObj = Instantiate(categoryBoxPrefab, contentParent);
+        InventoryCategoryBox categoryBox = boxObj.GetComponent<InventoryCategoryBox>();
+
+        if (categoryBox != null)
         {
-            case SortType.Category:
-                return rm.GetResourcesSortedByCategoryThenName();
-            case SortType.Name:
-                return rm.GetResourcesSortedByName();
-            case SortType.Amount:
-                return rm.GetResourcesSortedByAmount();
-            default:
-                return rm.GetOwnedResources();
+            categoryBox.Initialize(category);
+            categoryBoxes[category] = categoryBox;
         }
+
+        return categoryBox;
     }
 
-    // ==================== 슬롯 관리 ====================
-
-    private void CreateOrUpdateSlot(StoredResource stored)
+    /// <summary>
+    /// 아이템 슬롯 생성
+    /// </summary>
+    private void CreateItemSlot(InventoryCategoryBox categoryBox, StoredResource stored)
     {
-        if (slotDict.TryGetValue(stored.Item.ID, out var existingSlot))
-        {
-            existingSlot.UpdateAmount(stored.Amount);
-            return;
-        }
-
-        // 새 슬롯 생성
-        if (slotPrefab == null || slotContainer == null)
+        if (itemSlotPrefab == null || categoryBox == null)
             return;
 
-        GameObject slotObj = Instantiate(slotPrefab, slotContainer);
+        GameObject slotObj = Instantiate(itemSlotPrefab, categoryBox.ItemContainer);
         InventorySlotUI slotUI = slotObj.GetComponent<InventorySlotUI>();
 
         if (slotUI != null)
         {
-            slotUI.Initialize(stored);
+            int slotIndex = allSlots.Count;
+            slotUI.Initialize(stored, slotIndex, OnSlotClicked, OnSlotHovered);
+
             slotDict[stored.Item.ID] = slotUI;
             allSlots.Add(slotUI);
         }
     }
 
-    private void RemoveSlot(int resourceID)
+    /// <summary>
+    /// 전체 정리
+    /// </summary>
+    private void ClearAll()
     {
-        if (slotDict.TryGetValue(resourceID, out var slot))
+        foreach (var box in categoryBoxes.Values)
         {
-            allSlots.Remove(slot);
-            slotDict.Remove(resourceID);
-            Destroy(slot.gameObject);
+            if (box != null)
+                Destroy(box.gameObject);
         }
-    }
-
-    private void ClearAllSlots()
-    {
-        foreach (var slot in allSlots)
-        {
-            if (slot != null)
-                Destroy(slot.gameObject);
-        }
-        allSlots.Clear();
+        categoryBoxes.Clear();
         slotDict.Clear();
+        allSlots.Clear();
+        selectedSlot = null;
+        selectedIndex = -1;
     }
 
-    // ==================== 정렬 변경 ====================
+    // ==================== 선택/네비게이션 ====================
 
-    public void SetSortType(SortType type)
+    private void HandleNavigation()
     {
-        sortType = type;
-        if (isOpen)
-            RefreshUI();
+        if (allSlots.Count == 0) return;
+
+        // 방향키
+        if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D))
+        {
+            SelectSlot(selectedIndex + 1);
+        }
+        else if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A))
+        {
+            SelectSlot(selectedIndex - 1);
+        }
+        else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S))
+        {
+            SelectSlot(selectedIndex + GetColumnsPerRow());
+        }
+        else if (Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W))
+        {
+            SelectSlot(selectedIndex - GetColumnsPerRow());
+        }
     }
 
-    public void CycleSortType()
+    private int GetColumnsPerRow()
     {
-        sortType = (SortType)(((int)sortType + 1) % 3);
-        if (isOpen)
-            RefreshUI();
+        // GridLayoutGroup의 컬럼 수 추정 (기본 4)
+        return 4;
+    }
+
+    private void SelectSlot(int index)
+    {
+        if (allSlots.Count == 0) return;
+
+        index = Mathf.Clamp(index, 0, allSlots.Count - 1);
+
+        if (index == selectedIndex) return;
+
+        // 이전 선택 해제
+        if (selectedSlot != null)
+            selectedSlot.SetSelected(false);
+
+        selectedIndex = index;
+        selectedSlot = allSlots[index];
+        selectedSlot.SetSelected(true);
+
+        // 정보 패널 업데이트
+        UpdateInfoPanel();
+    }
+
+    private void DeselectAll()
+    {
+        if (selectedSlot != null)
+            selectedSlot.SetSelected(false);
+
+        selectedSlot = null;
+        selectedIndex = -1;
+    }
+
+    // ==================== 콜백 ====================
+
+    private void OnSlotClicked(InventorySlotUI slot)
+    {
+        int index = allSlots.IndexOf(slot);
+        if (index >= 0)
+        {
+            SelectSlot(index);
+        }
+    }
+
+    private void OnSlotHovered(InventorySlotUI slot)
+    {
+        int index = allSlots.IndexOf(slot);
+        if (index >= 0)
+        {
+            SelectSlot(index);
+        }
+    }
+
+    // ==================== 정보 패널 ====================
+
+    private void UpdateInfoPanel()
+    {
+        if (infoPanel == null || selectedSlot == null)
+            return;
+
+        infoPanel.ShowItem(selectedSlot.StoredResource);
     }
 }

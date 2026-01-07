@@ -5,10 +5,11 @@ using UnityEngine;
 /// </summary>
 public enum ResourceCategory
 {
-    RawMaterial,    // 원자재 (나무, 돌)
-    Processed,      // 가공품 (판자, 벽돌)
+    Currency,       // 재화
     Food,           // 음식
-    Tool,           // 도구
+    Material,       // 재료
+    Equipment,      // 장비
+    Seed,           // 씨앗
     Special         // 특수 아이템
 }
 
@@ -21,7 +22,7 @@ public class ResourceItemSO : ScriptableObject
     [Header("Basic Info")]
     [field: SerializeField] public string ResourceName { get; private set; }
     [field: SerializeField] public int ID { get; private set; }
-    [field: SerializeField] public ResourceCategory Category { get; private set; } = ResourceCategory.RawMaterial;
+    [field: SerializeField] public ResourceCategory Category { get; private set; } = ResourceCategory.Currency;
 
     [field: SerializeField, TextArea]
     public string Description { get; private set; }

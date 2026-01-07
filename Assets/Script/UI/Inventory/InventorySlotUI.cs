@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -7,39 +8,46 @@ using DG.Tweening;
 /// <summary>
 /// 인벤토리 슬롯 UI
 /// - 아이콘 + 개수 표시
-/// - 호버 시 툴팁 표시 (선택사항)
-/// - 수량 변경 시 애니메이션
+/// - 선택/호버 시 테두리 효과
 /// </summary>
-public class InventorySlotUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
+public class InventorySlotUI : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
     [Header("UI References")]
     [SerializeField] private Image iconImage;
+    [SerializeField] private Image borderImage;
     [SerializeField] private TextMeshProUGUI amountText;
-    [SerializeField] private Image backgroundImage;
 
     [Header("Colors")]
-    [SerializeField] private Color normalBgColor = new Color(0.2f, 0.2f, 0.2f, 0.8f);
-    [SerializeField] private Color hoverBgColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-    [SerializeField] private Color emptyColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
+    [SerializeField] private Color normalBorderColor = new Color(0.3f, 0.3f, 0.3f, 1f);
+    [SerializeField] private Color hoverBorderColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+    [SerializeField] private Color selectedBorderColor = new Color(1f, 0.2f, 0.2f, 1f);  // 빨간색 (사진처럼)
 
     [Header("Animation")]
-    [SerializeField] private float punchScale = 0.1f;
-    [SerializeField] private float punchDuration = 0.2f;
+    [SerializeField] private float scaleOnSelect = 1.05f;
+    [SerializeField] private float animDuration = 0.1f;
 
     // 데이터
     private StoredResource storedResource;
-    private int currentAmount;
+    private int slotIndex;
+    private bool isSelected = false;
 
+    // 콜백
+    private Action<InventorySlotUI> onClickCallback;
+    private Action<InventorySlotUI> onHoverCallback;
+
+    public StoredResource StoredResource => storedResource;
     public ResourceItemSO Item => storedResource?.Item;
-    public int Amount => currentAmount;
+    public int Amount => storedResource?.Amount ?? 0;
 
     /// <summary>
     /// 초기화
     /// </summary>
-    public void Initialize(StoredResource stored)
+    public void Initialize(StoredResource stored, int index, Action<InventorySlotUI> onClick, Action<InventorySlotUI> onHover)
     {
         storedResource = stored;
-        currentAmount = stored.Amount;
+        slotIndex = index;
+        onClickCallback = onClick;
+        onHoverCallback = onHover;
 
         // 아이콘 설정
         if (iconImage != null && stored.Item.Icon != null)
@@ -51,13 +59,12 @@ public class InventorySlotUI : MonoBehaviour, IPointerEnterHandler, IPointerExit
         // 수량 텍스트
         UpdateAmountText();
 
-        // 배경색
-        if (backgroundImage != null)
+        // 테두리 초기화
+        if (borderImage != null)
         {
-            backgroundImage.color = normalBgColor;
+            borderImage.color = normalBorderColor;
         }
 
-        // 이름 설정 (디버그용)
         gameObject.name = $"Slot_{stored.Item.ResourceName}";
     }
 
@@ -66,123 +73,75 @@ public class InventorySlotUI : MonoBehaviour, IPointerEnterHandler, IPointerExit
     /// </summary>
     public void UpdateAmount(int newAmount)
     {
-        int oldAmount = currentAmount;
-        currentAmount = newAmount;
-
+        if (storedResource != null)
+        {
+            storedResource.Amount = newAmount;
+        }
         UpdateAmountText();
 
-        // 수량 변경 애니메이션
-        if (oldAmount != newAmount)
-        {
-            PlayAmountChangeAnimation(newAmount > oldAmount);
-        }
+        // 펀치 애니메이션
+        transform.DOKill();
+        transform.DOPunchScale(Vector3.one * 0.1f, 0.2f, 1, 0.5f).SetUpdate(true);
     }
 
-    /// <summary>
-    /// 수량 텍스트 업데이트
-    /// </summary>
     private void UpdateAmountText()
     {
-        if (amountText == null)
-            return;
+        if (amountText == null) return;
 
-        if (currentAmount <= 0)
+        int amount = storedResource?.Amount ?? 0;
+
+        if (amount >= 1000)
         {
-            amountText.text = "0";
-            amountText.color = emptyColor;
-            if (iconImage != null)
-                iconImage.color = emptyColor;
-        }
-        else if (currentAmount >= 1000)
-        {
-            // 1000 이상이면 K 단위로 표시
-            amountText.text = $"{currentAmount / 1000f:0.#}K";
-            amountText.color = Color.white;
-            if (iconImage != null)
-                iconImage.color = Color.white;
+            amountText.text = $"{amount / 1000f:0.#}K";
         }
         else
         {
-            amountText.text = currentAmount.ToString();
-            amountText.color = Color.white;
-            if (iconImage != null)
-                iconImage.color = Color.white;
+            amountText.text = amount.ToString();
         }
     }
 
     /// <summary>
-    /// 수량 변경 애니메이션
+    /// 선택 상태 설정
     /// </summary>
-    private void PlayAmountChangeAnimation(bool increased)
+    public void SetSelected(bool selected)
     {
-        // 펀치 스케일 애니메이션
-        transform.DOKill();
-        transform.localScale = Vector3.one;
-        transform.DOPunchScale(Vector3.one * punchScale, punchDuration, 1, 0.5f)
-            .SetUpdate(true);
+        isSelected = selected;
 
-        // 텍스트 색상 깜빡임
-        if (amountText != null)
+        // 테두리 색상
+        if (borderImage != null)
         {
-            Color flashColor = increased ? Color.green : Color.red;
-            amountText.DOColor(flashColor, punchDuration * 0.5f)
-                .SetUpdate(true)
-                .OnComplete(() =>
-                {
-                    amountText.DOColor(Color.white, punchDuration * 0.5f)
-                        .SetUpdate(true);
-                });
+            borderImage.color = selected ? selectedBorderColor : normalBorderColor;
         }
+
+        // 스케일 애니메이션
+        transform.DOKill();
+        float targetScale = selected ? scaleOnSelect : 1f;
+        transform.DOScale(targetScale, animDuration).SetUpdate(true);
     }
 
-    // ==================== 호버 이벤트 ====================
+    // ==================== 포인터 이벤트 ====================
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        if (backgroundImage != null)
-        {
-            backgroundImage.DOColor(hoverBgColor, 0.1f).SetUpdate(true);
-        }
-
-        // 툴팁 표시 (InventoryTooltip이 있다면)
-        if (storedResource != null)
-        {
-            ShowTooltip();
-        }
+        onHoverCallback?.Invoke(this);
     }
 
     public void OnPointerExit(PointerEventData eventData)
     {
-        if (backgroundImage != null)
+        // 선택된 상태가 아니면 원래 색으로
+        if (!isSelected && borderImage != null)
         {
-            backgroundImage.DOColor(normalBgColor, 0.1f).SetUpdate(true);
-        }
-
-        HideTooltip();
-    }
-
-    private void ShowTooltip()
-    {
-        if (InventoryTooltip.Instance != null && storedResource != null)
-        {
-            InventoryTooltip.Instance.Show(storedResource.Item, currentAmount);
+            borderImage.color = normalBorderColor;
         }
     }
 
-    private void HideTooltip()
+    public void OnPointerClick(PointerEventData eventData)
     {
-        if (InventoryTooltip.Instance != null)
-        {
-            InventoryTooltip.Instance.Hide();
-        }
+        onClickCallback?.Invoke(this);
     }
 
     private void OnDestroy()
     {
         transform.DOKill();
-        if (amountText != null)
-            amountText.DOKill();
-        if (backgroundImage != null)
-            backgroundImage.DOKill();
     }
 }
