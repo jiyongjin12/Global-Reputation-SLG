@@ -15,8 +15,8 @@ public class CostItemUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI amountText;
 
     [Header("Size Settings (±âº»°ª)")]
-    [SerializeField] private float defaultIconSize = 24f;
-    [SerializeField] private float defaultFontSize = 16f;
+    [SerializeField] private float defaultIconSize;
+    [SerializeField] private float defaultFontSize;
 
     [Header("Colors")]
     [SerializeField] private Color normalColor = Color.white;
