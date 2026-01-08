@@ -7,22 +7,20 @@ public class ChatSystemManager : MonoBehaviour
 {
     [Header("UI References")]
     public TMP_InputField chatInput;
-    public Button sendButton;        // 전송(엔터) 버튼
-    public RectTransform chatContent; // ScrollView -> Viewport -> Content
-    public ScrollRect scrollRect;    // 자동 스크롤용
-    public GameObject messagePrefab; // ChatUIItem 스크립트가 붙은 프리팹
+    public Button sendButton;
+    public RectTransform chatContent;
+    public ScrollRect scrollRect;
+    public GameObject messagePrefab;
 
     [Header("AI Engine")]
-    public AIChatSystem aiSystem;    // AIChatSystem 연결
+    public AIChatSystem aiSystem;
 
     void Start()
     {
-        // 1. 엔터키 입력 이벤트 연결
         chatInput.onEndEdit.AddListener((text) => {
             if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter)) OnSend();
         });
 
-        // 2. 전송 버튼 클릭 이벤트 연결
         sendButton.onClick.AddListener(OnSend);
     }
 
@@ -31,29 +29,59 @@ public class ChatSystemManager : MonoBehaviour
         string text = chatInput.text;
         if (string.IsNullOrWhiteSpace(text)) return;
 
-        // 비동기로 메시지 처리 프로세스 시작
         ProcessAndSendMessage(text).Forget();
 
-        // 입력창 초기화 및 다시 포커스
         chatInput.text = "";
         chatInput.ActivateInputField();
     }
 
     private async UniTaskVoid ProcessAndSendMessage(string rawText)
     {
-        // [1단계] 독성 검사만 먼저 수행 (번역보다 훨씬 빠름)
+        // [1단계] 하이브리드 독성 검사 (로컬 -> 캐시 -> API)
         float toxicityScore = await aiSystem.CheckToxicity(rawText);
         bool isFiltered = toxicityScore > 0.5f;
 
-        // [2단계] 메시지 객체 생성 (번역은 아직 하지 않은 상태)
+        // [2단계] 강화된 평판 포인트 연동 ★
+        UpdateReputationSubPoints(toxicityScore);
+
+        // [3단계] 메시지 생성
         GameObject newMsgObj = Instantiate(messagePrefab, chatContent);
         var uiItem = newMsgObj.GetComponent<ChatUIItem>();
-
-        // UI 아이템 초기화 (AI 시스템 참조를 넘겨줌)
         uiItem.Initialize(aiSystem, "Player", rawText, isFiltered);
 
-        // [3단계] 레이아웃 갱신 후 하단으로 자동 스크롤
+        // [4단계] 하단 스크롤
         await UniTask.Yield(PlayerLoopTiming.LastPostLateUpdate);
-        scrollRect.verticalNormalizedPosition = 0f;
+        if (scrollRect != null) scrollRect.verticalNormalizedPosition = 0f;
+    }
+
+    /// <summary>
+    /// AI 독성 점수에 따라 서브 포인트를 가감합니다.
+    /// </summary>
+    private void UpdateReputationSubPoints(float score)
+    {
+        if (ReputationManager.Instance == null) return;
+
+        float pointChange = 0f;
+
+        // 1. 긍정적인 채팅 (0.5 이하): +1 포인트 (10번 말해야 평판 1 상승)
+        if (score <= 0.5f)
+        {
+            pointChange = 1.0f;
+        }
+        // 2. 심각한 독성 (0.8 이상): -10 포인트 (한 번만 말해도 평판 1 즉시 하락)
+        else if (score >= 0.9f)
+        {
+            pointChange = -10.0f;
+        }
+        // 3. 일반적인 비난 (0.5 이상): -3.3 포인트 (약 3번 말하면 평판 1 하락)
+        else if (score >= 0.5f)
+        {
+            pointChange = -3.34f;
+        }
+
+        if (pointChange != 0)
+        {
+            ReputationManager.Instance.AddReputationPoints(pointChange);
+        }
     }
 }
