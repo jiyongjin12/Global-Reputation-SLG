@@ -181,11 +181,6 @@ public class BuildingUIManager : MonoBehaviour, IEscapableUI
     /// </summary>
     private void InitializeDepthOfField()
     {
-        if (globalVolume == null)
-        {
-            globalVolume = FindObjectOfType<Volume>();
-        }
-
         if (globalVolume != null && globalVolume.profile != null)
         {
             if (!globalVolume.profile.TryGet(out depthOfField))
