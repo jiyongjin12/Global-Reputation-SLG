@@ -457,7 +457,7 @@ MonoBehaviour:
   infoPanel: {fileID: 6511336174128492072}
   categoryPrefab: {fileID: 5580218651889010331, guid: c3d015a8638aa34479296c4fec56186f, type: 3}
   buildingButtonPrefab: {fileID: 6815561528895331955, guid: 5ede4c99d9e8fd340b8506ec35eea36c, type: 3}
-  globalVolume: {fileID: 1167123843}
+  globalVolume: {fileID: 0}
   blurFocalLengthMin: 0
   blurFocalLengthMax: 50
   closedPosX: -1500
@@ -1636,12 +1636,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 399925758}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1440100002}
+  m_Father: {fileID: 1847608543}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &410087039
 GameObject:
@@ -2406,7 +2406,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1125739303}
   m_Father: {fileID: 1862973937}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &676129582
@@ -4079,12 +4080,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1125739302}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 1862973937}
+  m_Father: {fileID: 676129581}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1125739304
 MonoBehaviour:
@@ -4512,7 +4513,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 54909258eca6737499eafa279d5ef136, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  apiConfig: {fileID: 11400000, guid: d0c0c00bc26b66247aeb296230b0c8b6, type: 2}
+  apiConfig: {fileID: 11400000, guid: 96967d7d50b5a2447bd2cd24ba36dd18, type: 2}
   localFilter: {fileID: 1174879780}
   targetLanguage: "\uC601\uC5B4"
 --- !u!114 &1174879778
@@ -5007,7 +5008,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1360080453
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5358,10 +5359,9 @@ Transform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1211611849}
-  - {fileID: 164399260}
   - {fileID: 894807441}
+  - {fileID: 164399260}
   - {fileID: 1333794}
-  - {fileID: 399925760}
   - {fileID: 1425124456}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -6437,7 +6437,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 399925760}
   m_Father: {fileID: 1862973937}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1847608544
@@ -6609,7 +6610,6 @@ Transform:
   - {fileID: 676129581}
   - {fileID: 1847608543}
   - {fileID: 1174879776}
-  - {fileID: 1125739303}
   - {fileID: 86120721}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -7270,6 +7270,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2101093266}
+  - component: {fileID: 2101093267}
   m_Layer: 0
   m_Name: UISystem
   m_TagString: Untagged
@@ -7297,6 +7298,25 @@ Transform:
   - {fileID: 297426677}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2101093267
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2101093265}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 45fa3143a48fa6441a5d9ac0f678b210, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  uiOpenTimeScale: 0.1
+  normalTimeScale: 1
+  timeScaleLerpSpeed: 5
+  buildingKey: 98
+  chatKey: 116
+  inventoryKey: 105
+  pauseKey: 27
 --- !u!1 &2102908057
 GameObject:
   m_ObjectHideFlags: 0
