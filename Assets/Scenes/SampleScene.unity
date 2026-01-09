@@ -457,7 +457,7 @@ MonoBehaviour:
   infoPanel: {fileID: 6511336174128492072}
   categoryPrefab: {fileID: 5580218651889010331, guid: c3d015a8638aa34479296c4fec56186f, type: 3}
   buildingButtonPrefab: {fileID: 6815561528895331955, guid: 5ede4c99d9e8fd340b8506ec35eea36c, type: 3}
-  globalVolume: {fileID: 0}
+  globalVolume: {fileID: 1167123843}
   blurFocalLengthMin: 0
   blurFocalLengthMax: 50
   closedPosX: -1500
@@ -468,7 +468,6 @@ MonoBehaviour:
   cardFadeInStartDelay: 0.1
   slowTimeScale: 0.05
   normalTimeScale: 1
-  timeScaleDuration: 0.3
   escapePriority: 90
 --- !u!1 &134490161
 GameObject:
@@ -1170,7 +1169,6 @@ MonoBehaviour:
   slideEase: 12
   slowTimeScale: 0.05
   normalTimeScale: 1
-  timeScaleDuration: 0.3
   escapePriority: 80
   isOpen: 0
 --- !u!1 &310371757
@@ -4558,7 +4556,6 @@ MonoBehaviour:
   slideEase: 12
   slowTimeScale: 0.05
   normalTimeScale: 1
-  timeScaleDuration: 0.3
   escapePriority: 100
   isOpen: 0
 --- !u!114 &1174879780
@@ -7270,7 +7267,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2101093266}
-  - component: {fileID: 2101093267}
+  - component: {fileID: 2101093268}
   m_Layer: 0
   m_Name: UISystem
   m_TagString: Untagged
@@ -7298,7 +7295,7 @@ Transform:
   - {fileID: 297426677}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2101093267
+--- !u!114 &2101093268
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -7307,16 +7304,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 2101093265}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 45fa3143a48fa6441a5d9ac0f678b210, type: 3}
+  m_Script: {fileID: 11500000, guid: 3722a5059f880c043907ddfcba24785a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  uiOpenTimeScale: 0.1
-  normalTimeScale: 1
-  timeScaleLerpSpeed: 5
-  buildingKey: 98
-  chatKey: 116
-  inventoryKey: 105
-  pauseKey: 27
+  showDebugLogs: 0
 --- !u!1 &2102908057
 GameObject:
   m_ObjectHideFlags: 0

@@ -8,8 +8,9 @@ using UnityEngine;
 public enum GameAction
 {
     // UI 관련
-    OpenChat,           // 채팅 열기 (Enter) 
-    OpenBuilding,       // 건물UI 열기 아마도 B
+    OpenChat,           // 채팅 열기 (Enter)
+    OpenBuilding,       // 건물UI 열기/닫기 (B)
+    OpenInventory,      // ★ 인벤토리 열기/닫기 (I)
     CloseUI,            // UI 닫기 / 취소 (ESC)
     OpenSettings,       // 설정 열기
 
@@ -22,7 +23,6 @@ public enum GameAction
     Pause,              // 일시정지 (P)
     QuickSave,          // 빠른 저장 (F5)
     QuickLoad,          // 빠른 로드 (F9)
-
 }
 
 /// <summary>
@@ -46,7 +46,7 @@ public class GameInputManager : MonoBehaviour
     public static GameInputManager Instance { get; private set; }
 
     [Header("=== 디버그 ===")]
-    [SerializeField] private bool showDebugLogs = false;
+    [SerializeField] private bool showDebugLogs = true;
 
     // ==================== 키 바인딩 ====================
 
@@ -57,6 +57,7 @@ public class GameInputManager : MonoBehaviour
     {
         { GameAction.OpenChat, KeyCode.Return },
         { GameAction.OpenBuilding, KeyCode.B },
+        { GameAction.OpenInventory, KeyCode.I },        // ★ 추가
         { GameAction.CloseUI, KeyCode.Escape },
         { GameAction.OpenSettings, KeyCode.Escape },
         { GameAction.MoveBuilding, KeyCode.C },
@@ -140,34 +141,37 @@ public class GameInputManager : MonoBehaviour
     /// </summary>
     private void HandleEscapeKey()
     {
-        // 1. 등록된 UI 중 열린 것 찾기 (우선순위 높은 순)
+        if (showDebugLogs)
+            Debug.Log("[GameInputManager] ESC 키 처리 시작");
+
+        // 1. 현재 모드 취소 (배치/이동/삭제 모드) - 가장 먼저!
+        if (currentModeExitAction != null)
+        {
+            if (showDebugLogs)
+                Debug.Log("[GameInputManager] ESC: 모드 취소");
+
+            currentModeExitAction.Invoke();
+            ClearCurrentMode();
+
+            OnEscapeHandled?.Invoke();
+            return;
+        }
+
+        // 2. 등록된 UI 중 열린 것 찾기 (우선순위 높은 순)
         escapableUIs.Sort((a, b) => b.EscapePriority.CompareTo(a.EscapePriority));
 
         foreach (var ui in escapableUIs)
         {
             if (ui != null && ui.IsOpen)
             {
-                ui.Close();
-
                 if (showDebugLogs)
                     Debug.Log($"[GameInputManager] ESC: UI 닫음 (Priority: {ui.EscapePriority})");
+
+                ui.Close();
 
                 OnEscapeHandled?.Invoke();
                 return; // 하나만 닫고 종료
             }
-        }
-
-        // 2. 현재 모드 취소 (배치/이동/삭제 모드)
-        if (currentModeExitAction != null)
-        {
-            currentModeExitAction.Invoke();
-            ClearCurrentMode();
-
-            if (showDebugLogs)
-                Debug.Log("[GameInputManager] ESC: 모드 취소");
-
-            OnEscapeHandled?.Invoke();
-            return;
         }
 
         // 3. 아무것도 닫을 게 없으면 설정 열기 등
@@ -222,6 +226,11 @@ public class GameInputManager : MonoBehaviour
         currentModeExitAction = null;
         currentModePriority = 0;
     }
+
+    /// <summary>
+    /// ★ 현재 모드가 활성화되어 있는지 확인
+    /// </summary>
+    public bool HasActiveMode => currentModeExitAction != null;
 
     // ==================== 키 바인딩 관리 ====================
 

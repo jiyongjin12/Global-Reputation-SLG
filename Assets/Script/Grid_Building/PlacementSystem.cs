@@ -36,16 +36,26 @@ public class PlacementSystem : MonoBehaviour
     // ★ 현재 배치 중인 오브젝트 크기 (중앙 보정용)
     private Vector2Int currentPlacementSize = Vector2Int.one;
 
+    // ★ 현재 모드 (외부에서 체크용)
+    public bool IsPlacementActive => buildingState != null;
+    public bool IsMovingMode { get; private set; } = false;
+    public bool IsRemovingMode { get; private set; } = false;
+
     // 이벤트
     public event Action<Building> OnBuildingPlaced;
+    public event Action<Building> OnBuildingMoved;
     public event Action<GameObject> OnBuildingRemoved;
     public event Action<string> OnPlacementFailed;
+    public event Action OnPlacementStarted;
+    public event Action OnPlacementEnded;
 
     private void Start()
     {
         gridVisualization.SetActive(false);
         floorData = new();
         furnitureData = new();
+
+        Debug.Log("[PlacementSystem] Start 완료");
     }
 
     public void StartPlacement(int ID)
@@ -62,7 +72,7 @@ public class PlacementSystem : MonoBehaviour
         // 자원 체크
         if (data.ConstructionCosts != null && data.ConstructionCosts.Length > 0)
         {
-            if (!ResourceManager.Instance.CanAfford(data.ConstructionCosts))
+            if (ResourceManager.Instance != null && !ResourceManager.Instance.CanAfford(data.ConstructionCosts))
             {
                 OnPlacementFailed?.Invoke("자원이 부족합니다!");
                 Debug.Log("자원이 부족합니다!");
@@ -75,7 +85,7 @@ public class PlacementSystem : MonoBehaviour
         // ★ 현재 배치 중인 오브젝트 크기 저장
         currentPlacementSize = data.Size;
 
-        // 수정: GridDataManager 사용
+        // GridDataManager 사용
         GridData envData = null;
         if (GridDataManager.Instance != null)
         {
@@ -99,8 +109,46 @@ public class PlacementSystem : MonoBehaviour
             OnBuildingPlacedInternal
         );
 
+        IsMovingMode = false;
+        IsRemovingMode = false;
+
         inputManager.OnClicked += PlaceStructure;
         inputManager.OnExit += StopPlacement;
+
+        OnPlacementStarted?.Invoke();
+        Debug.Log($"[PlacementSystem] 배치 모드 시작: {data.Name}");
+    }
+
+    /// <summary>
+    /// ★ 건물 이동 모드 시작 (C 키)
+    /// BuildingUIManager에서 호출됨
+    /// </summary>
+    public void StartMoving()
+    {
+        StopPlacement();
+        gridVisualization.SetActive(true);
+
+        // ★ 이동 모드는 선택 전까지 1x1
+        currentPlacementSize = Vector2Int.one;
+
+        buildingState = new MovingState(
+            grid,
+            preview,
+            floorData,
+            furnitureData,
+            database,
+            placedBuildings,
+            OnBuildingMovedInternal
+        );
+
+        IsMovingMode = true;
+        IsRemovingMode = false;
+
+        inputManager.OnClicked += PlaceStructure;
+        inputManager.OnExit += StopPlacement;
+
+        OnPlacementStarted?.Invoke();
+        Debug.Log("[PlacementSystem] 이동 모드 시작 - 이동할 건물을 클릭하세요");
     }
 
     public void StartRemoving()
@@ -120,8 +168,15 @@ public class PlacementSystem : MonoBehaviour
             placedBuildings,
             OnBuildingRemovedInternal
         );
+
+        IsMovingMode = false;
+        IsRemovingMode = true;
+
         inputManager.OnClicked += PlaceStructure;
         inputManager.OnExit += StopPlacement;
+
+        OnPlacementStarted?.Invoke();
+        Debug.Log("[PlacementSystem] 삭제 모드 시작 - 삭제할 건물을 클릭하세요");
     }
 
     private void PlaceStructure()
@@ -138,10 +193,11 @@ public class PlacementSystem : MonoBehaviour
         buildingState.OnAction(gridPosition);
     }
 
-    private void StopPlacement()
+    public void StopPlacement()
     {
         if (buildingState == null)
             return;
+
         gridVisualization.SetActive(false);
         buildingState.EndState();
         inputManager.OnClicked -= PlaceStructure;
@@ -149,8 +205,15 @@ public class PlacementSystem : MonoBehaviour
         lastDetectedPosition = Vector3Int.zero;
         buildingState = null;
 
+        // ★ 모드 플래그 초기화
+        IsMovingMode = false;
+        IsRemovingMode = false;
+
         // ★ 크기 초기화
         currentPlacementSize = Vector2Int.one;
+
+        OnPlacementEnded?.Invoke();
+        Debug.Log("[PlacementSystem] 모드 종료");
     }
 
     private void Update()
@@ -174,16 +237,6 @@ public class PlacementSystem : MonoBehaviour
     /// </summary>
     private Vector3Int GetCenteredAndClampedGridPosition(Vector3 mouseWorldPos, Vector2Int size)
     {
-        // 크기별 중심점 계산:
-        // - 홀수 (1x1, 3x3): 중심이 셀 중앙 (0.5, 0.5 위치)
-        // - 짝수 (2x2, 4x4): 중심이 셀 교차점 (정수 위치)
-        //
-        // 예시:
-        // 1x1: 중심 = (0.5, 0.5) - 셀 한 칸의 중앙
-        // 2x2: 중심 = (1.0, 1.0) - 4칸 교차점
-        // 3x3: 중심 = (1.5, 1.5) - 가운데 셀의 중앙
-        // 4x4: 중심 = (2.0, 2.0) - 4칸 교차점
-
         int originX, originZ;
 
         // X축 계산
@@ -192,7 +245,7 @@ public class PlacementSystem : MonoBehaviour
             int centerX = Mathf.RoundToInt(mouseWorldPos.x);
             originX = centerX - size.x / 2;
         }
-        else // 홀수: 셀 중앙이 중심 → 마우스가 있는 셀이 중심 셀
+        else // 홀수: 셀 중앙이 중심
         {
             int centerCellX = Mathf.FloorToInt(mouseWorldPos.x);
             originX = centerCellX - size.x / 2;
@@ -224,19 +277,14 @@ public class PlacementSystem : MonoBehaviour
         if (GridDataManager.Instance == null)
             return gridPos;
 
-        // GridDataManager에서 맵 범위 가져오기
         int cellCountX = GridDataManager.Instance.CellCountX;
         int cellCountZ = GridDataManager.Instance.CellCountZ;
 
-        // 셀 인덱스로 변환
         var (cellX, cellZ) = GridDataManager.Instance.GridPositionToCellIndex(gridPos);
 
-        // 클램핑: 오브젝트가 맵 안에 완전히 들어오도록
-        // 최소: 0, 최대: cellCount - size
         int clampedCellX = Mathf.Clamp(cellX, 0, cellCountX - size.x);
         int clampedCellZ = Mathf.Clamp(cellZ, 0, cellCountZ - size.y);
 
-        // 다시 그리드 좌표로 변환
         Vector3Int clampedGridPos = GridDataManager.Instance.CellIndexToGridPosition(clampedCellX, clampedCellZ);
 
         return clampedGridPos;
@@ -245,6 +293,12 @@ public class PlacementSystem : MonoBehaviour
     private void OnBuildingPlacedInternal(Building building)
     {
         OnBuildingPlaced?.Invoke(building);
+    }
+
+    private void OnBuildingMovedInternal(Building building)
+    {
+        OnBuildingMoved?.Invoke(building);
+        Debug.Log($"[PlacementSystem] 건물 이동됨: {building?.name}");
     }
 
     private void OnBuildingRemovedInternal(GameObject removedObj)
@@ -263,5 +317,13 @@ public class PlacementSystem : MonoBehaviour
     public GameObject GetBuildingAt(Vector3Int gridPosition)
     {
         return placedBuildings.TryGetValue(gridPosition, out var obj) ? obj : null;
+    }
+
+    /// <summary>
+    /// 배치된 모든 건물 가져오기
+    /// </summary>
+    public Dictionary<Vector3Int, GameObject> GetAllPlacedBuildings()
+    {
+        return placedBuildings;
     }
 }

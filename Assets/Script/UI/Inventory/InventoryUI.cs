@@ -8,41 +8,40 @@ using UnityEngine.Rendering.Universal;
 using DG.Tweening;
 
 /// <summary>
-/// 인벤토리 UI (BuildingUIManager 스타일)
+/// 인벤토리 UI
 /// - IEscapableUI 구현: GameInputManager 연동
 /// - DOTween 슬라이드 애니메이션 + 시간 느려짐 + Depth of Field 블러
+/// - ★ I키로 열기/닫기 (토글)
 /// </summary>
 public class InventoryUI : MonoBehaviour, IEscapableUI
 {
     [Header("=== UI References ===")]
-    [SerializeField] private GameObject inventoryPanel;          // 전체 패널
-    [SerializeField] private Transform contentParent;            // ScrollView의 Content
-    [SerializeField] private InventoryInfoPanel infoPanel;       // 아이템 정보 패널 (우측)
+    [SerializeField] private GameObject inventoryPanel;
+    [SerializeField] private Transform contentParent;
+    [SerializeField] private InventoryInfoPanel infoPanel;
     private RectTransform panelRectTransform;
 
     [Header("=== Prefabs ===")]
-    [SerializeField] private GameObject categoryBoxPrefab;       // CategoryBox 프리팹
-    [SerializeField] private GameObject itemSlotPrefab;          // ItemSlot 프리팹
+    [SerializeField] private GameObject categoryBoxPrefab;
+    [SerializeField] private GameObject itemSlotPrefab;
 
     [Header("=== Post Processing ===")]
-    [SerializeField] private Volume globalVolume;                // Global Volume 참조
-    [SerializeField] private float blurFocalLengthMin = 0f;      // 닫힌 상태 (블러 없음)
-    [SerializeField] private float blurFocalLengthMax = 50f;     // 열린 상태 (블러 최대)
+    [SerializeField] private Volume globalVolume;
+    [SerializeField] private float blurFocalLengthMin = 0f;
+    [SerializeField] private float blurFocalLengthMax = 50f;
 
     [Header("=== 애니메이션 설정 ===")]
-    [SerializeField] private float closedPosX = -1400f;          // 닫힌 상태 X 위치 (왼쪽 밖)
-    [SerializeField] private float openedPosX = 0f;              // 열린 상태 X 위치
-    [SerializeField] private float slideDuration = 0.4f;         // 슬라이드 애니메이션 시간
-    [SerializeField] private Ease slideEase = Ease.OutQuart;     // 슬라이드 이징
+    [SerializeField] private float closedPosX = -1400f;
+    [SerializeField] private float openedPosX = 0f;
+    [SerializeField] private float slideDuration = 0.4f;
+    [SerializeField] private Ease slideEase = Ease.OutQuart;
 
     [Header("=== 게임 속도 설정 ===")]
-    [SerializeField] private float slowTimeScale = 0.05f;        // 열렸을 때 게임 속도
-    [SerializeField] private float normalTimeScale = 1f;         // 닫혔을 때 게임 속도
-    [SerializeField] private float timeScaleDuration = 0.3f;     // 속도 변경 시간
+    [SerializeField] private float slowTimeScale = 0.05f;
+    [SerializeField] private float normalTimeScale = 1f;
 
     [Header("=== ESC 우선순위 ===")]
-    [Tooltip("높을수록 ESC 시 먼저 닫힘 (건물UI: 90, 인벤토리: 80)")]
-    [SerializeField] private int escapePriority = 80;            // 인벤토리는 건물창보다 낮은 우선순위
+    [SerializeField] private int escapePriority = 80;
 
     [Header("=== 상태 ===")]
     [SerializeField] private bool isOpen = false;
@@ -50,12 +49,11 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
     // Depth of Field 참조
     private DepthOfField depthOfField;
 
-    // 현재 진행 중인 트윈
+    // 트윈
     private Tweener panelTween;
     private Tweener blurTween;
-    private Tweener timeTween;
 
-    // 데이터 관리 (기본 로직 유지)
+    // 데이터 관리
     private Dictionary<ResourceCategory, InventoryCategoryBox> categoryBoxes = new Dictionary<ResourceCategory, InventoryCategoryBox>();
     private Dictionary<int, InventorySlotUI> slotDict = new Dictionary<int, InventorySlotUI>();
     private List<InventorySlotUI> allSlots = new List<InventorySlotUI>();
@@ -92,16 +90,20 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
             ResourceManager.Instance.OnResourceChanged += OnResourceChanged;
         }
 
-        // GameInputManager에 등록
+        // ★ GameInputManager에 등록
         if (GameInputManager.Instance != null)
         {
             GameInputManager.Instance.RegisterEscapableUI(this);
+            GameInputManager.Instance.OnActionTriggered += HandleGameAction;
+            Debug.Log("[InventoryUI] GameInputManager에 등록됨");
         }
     }
 
     private void OnDestroy()
     {
         KillAllTweens();
+
+        // ★ TimeScale 복구 (중요!)
         Time.timeScale = normalTimeScale;
 
         if (ResourceManager.Instance != null)
@@ -111,18 +113,37 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
         }
 
         if (GameInputManager.Instance != null)
+        {
             GameInputManager.Instance.UnregisterEscapableUI(this);
+            GameInputManager.Instance.OnActionTriggered -= HandleGameAction;
+        }
     }
 
     private void Update()
     {
-        HandleInputFallback();
-
         if (!isOpen) return;
         HandleNavigation();
     }
 
-    // ==================== 초기화 및 입력 처리 ====================
+    // ==================== 입력 처리 ====================
+
+    private void HandleGameAction(GameAction action)
+    {
+        switch (action)
+        {
+            case GameAction.OpenInventory:
+                // 다른 UI가 열려있으면 무시
+                if (BuildingUIManager.Instance != null && BuildingUIManager.Instance.IsOpen)
+                    return;
+                if (ChatPanelController.Instance != null && ChatPanelController.Instance.IsOpen)
+                    return;
+
+                Toggle();
+                break;
+        }
+    }
+
+    // ==================== 초기화 ====================
 
     private void InitializeDepthOfField()
     {
@@ -145,17 +166,7 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
         isOpen = false;
     }
 
-    private void HandleInputFallback()
-    {
-        // 'I' 키로 인벤토리 토글 (BuildingUI가 닫혀있을 때만)
-        if (Input.GetKeyDown(KeyCode.I))
-        {
-            if (BuildingUIManager.Instance != null && BuildingUIManager.Instance.IsOpen) return;
-            Toggle();
-        }
-    }
-
-    // ==================== 열기/닫기 (BuildingUIManager 스타일) ====================
+    // ==================== 열기/닫기 ====================
 
     public void Toggle()
     {
@@ -168,6 +179,8 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
         if (isOpen) return;
         isOpen = true;
 
+        Debug.Log("[InventoryUI] Open() 호출됨");
+
         KillAllTweens();
         inventoryPanel.SetActive(true);
         RefreshUI();
@@ -175,11 +188,11 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
         // 첫 번째 아이템 자동 선택
         if (allSlots.Count > 0) SelectSlot(0);
 
-        // 1. 패널 슬라이드 (왼쪽에서 들어옴)
+        // 1. 패널 슬라이드
         panelTween = panelRectTransform
             .DOAnchorPosX(openedPosX, slideDuration)
             .SetEase(slideEase)
-            .SetUpdate(true); // 일시정지 중에도 작동
+            .SetUpdate(true);
 
         // 2. Depth of Field 블러
         if (depthOfField != null)
@@ -189,9 +202,9 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
                 .SetUpdate(true);
         }
 
-        // 3. 게임 속도 감소
-        timeTween = DOTween.To(() => Time.timeScale, x => Time.timeScale = x, slowTimeScale, timeScaleDuration)
-            .SetUpdate(true);
+        // ★ 3. TimeScale 즉시 설정
+        Time.timeScale = slowTimeScale;
+        Debug.Log($"[InventoryUI] TimeScale 설정: {slowTimeScale}");
 
         OnPanelOpened?.Invoke();
     }
@@ -201,11 +214,13 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
         if (!isOpen) return;
         isOpen = false;
 
+        Debug.Log("[InventoryUI] Close() 호출됨");
+
         KillAllTweens();
         DeselectAll();
         if (infoPanel != null) infoPanel.Hide();
 
-        // 1. 패널 슬라이드 (왼쪽 밖으로 나감)
+        // 1. 패널 슬라이드
         panelTween = panelRectTransform
             .DOAnchorPosX(closedPosX, slideDuration)
             .SetEase(slideEase)
@@ -220,9 +235,9 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
                 .SetUpdate(true);
         }
 
-        // 3. 게임 속도 복구
-        timeTween = DOTween.To(() => Time.timeScale, x => Time.timeScale = x, normalTimeScale, timeScaleDuration)
-            .SetUpdate(true);
+        // ★ 3. TimeScale 즉시 복구
+        Time.timeScale = normalTimeScale;
+        Debug.Log($"[InventoryUI] TimeScale 복구: {normalTimeScale}");
 
         OnPanelClosed?.Invoke();
     }
@@ -231,10 +246,9 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
     {
         panelTween?.Kill();
         blurTween?.Kill();
-        timeTween?.Kill();
     }
 
-    // ==================== 데이터 및 슬롯 관리 (기존 로직 최적화) ====================
+    // ==================== 데이터 및 슬롯 관리 ====================
 
     public void RefreshUI()
     {
@@ -328,7 +342,7 @@ public class InventoryUI : MonoBehaviour, IEscapableUI
     private void HandleNavigation()
     {
         if (allSlots.Count == 0) return;
-        int col = 4; // 그리드 열 수
+        int col = 4;
         if (Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D)) SelectSlot(selectedIndex + 1);
         else if (Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A)) SelectSlot(selectedIndex - 1);
         else if (Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S)) SelectSlot(selectedIndex + col);
