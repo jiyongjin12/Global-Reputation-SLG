@@ -11,7 +11,15 @@ public enum BuildingType
     Storage,        // 창고 (메인 건물)
     UnitHouse,      // 유닛 고용/거주 건물
     Production,     // 생산 건물
-    Decoration      // 장식
+    Decoration,     // 장식
+
+    // ★ 새로 추가
+    Farmland,       // 농경지
+    Workshop,       // 작업장 (제작)
+    Kitchen,        // 주방 (요리)
+    Quarry,         // 채석장 (자동 생산)
+    LumberMill,     // 벌목장 (자동 생산)
+    Mine,           // 광산 (자동 생산)
 }
 
 /// <summary>
@@ -23,6 +31,8 @@ public enum BuildingState
     UnderConstruction,  // 건설 중
     Completed           // 완료
 }
+
+// BuildingCategory는 BuildingCategory.cs에 정의되어 있음
 
 [CreateAssetMenu]
 public class ObjectsDatabaseSO : ScriptableObject
@@ -43,6 +53,14 @@ public class ObjectsDatabaseSO : ScriptableObject
     }
 
     /// <summary>
+    /// 특정 타입의 모든 건물 가져오기
+    /// </summary>
+    public List<ObjectData> GetObjectsByType(BuildingType type)
+    {
+        return objectsData.FindAll(o => o.Type == type);
+    }
+
+    /// <summary>
     /// 모든 카테고리 가져오기 (데이터에 존재하는 것만)
     /// </summary>
     public List<BuildingCategory> GetAllCategories()
@@ -54,7 +72,7 @@ public class ObjectsDatabaseSO : ScriptableObject
         }
 
         List<BuildingCategory> result = new List<BuildingCategory>(categories);
-        result.Sort(); // enum 순서대로 정렬
+        result.Sort();
         return result;
     }
 }
@@ -74,24 +92,21 @@ public class ObjectData
     [field: SerializeField]
     public BuildingType Type { get; private set; }
 
-    // ★ 새로 추가: 카테고리
     [field: SerializeField]
     public BuildingCategory Category { get; private set; } = BuildingCategory.General;
 
-    // ★ 새로 추가: UI용 아이콘
     [field: SerializeField]
     public Sprite Icon { get; private set; }
 
-    // ★ 새로 추가: 설명
     [field: SerializeField, TextArea(2, 4)]
     public string Description { get; private set; }
 
     [Header("Prefabs")]
     [field: SerializeField]
-    public GameObject Prefab { get; private set; }  // 완성된 건물 (기존 호환)
+    public GameObject Prefab { get; private set; }
 
     [field: SerializeField]
-    public GameObject BlueprintPrefab { get; private set; }  // 건설 예정 상태 (반투명)
+    public GameObject BlueprintPrefab { get; private set; }
 
     [Header("Construction")]
     [field: SerializeField]
@@ -104,7 +119,20 @@ public class ObjectData
     [field: SerializeField]
     public int MaxUnitCapacity { get; private set; } = 0;
 
-    // ★ 새로 추가: UI에 표시할지 여부 (Floor 등 숨길 건물용)
     [field: SerializeField]
     public bool ShowInBuildMenu { get; private set; } = true;
+
+    // ★ 새로 추가: 워크스테이션용 설정
+    [Header("Workstation Settings")]
+    [field: SerializeField]
+    public WorkTaskType WorkTaskType { get; private set; } = WorkTaskType.None;
+
+    [field: SerializeField]
+    public List<RecipeSO> AvailableRecipes { get; private set; }
+
+    [field: SerializeField]
+    public ResourceItemSO AutoProducedResource { get; private set; }
+
+    [field: SerializeField]
+    public float ProductionInterval { get; private set; } = 10f;
 }

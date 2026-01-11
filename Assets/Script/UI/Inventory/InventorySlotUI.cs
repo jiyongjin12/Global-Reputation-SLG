@@ -19,7 +19,6 @@ public class InventorySlotUI : MonoBehaviour, IPointerEnterHandler, IPointerExit
 
     [Header("Colors")]
     [SerializeField] private Color normalBorderColor = new Color(0.3f, 0.3f, 0.3f, 1f);
-    [SerializeField] private Color hoverBorderColor = new Color(0.8f, 0.8f, 0.8f, 1f);
     [SerializeField] private Color selectedBorderColor = new Color(1f, 0.2f, 0.2f, 1f);  // 빨간색 (사진처럼)
 
     [Header("Animation")]

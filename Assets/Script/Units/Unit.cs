@@ -40,10 +40,12 @@ public class Unit : MonoBehaviour
     [Header("Traits")]
     [SerializeField] private List<UnitTraitSO> traits = new();
 
+    [Header("=== 인벤토리 (인스펙터 확인용) ===")]
+    [SerializeField] private UnitInventory inventory = new UnitInventory();
+
     // Components
     private NavMeshAgent agent;
     private UnitMovement movement;
-    private UnitInventory inventory;
 
     // Blackboard
     public UnitBlackboard Blackboard { get; private set; }
@@ -79,7 +81,6 @@ public class Unit : MonoBehaviour
     {
         agent = GetComponent<NavMeshAgent>();
         movement = GetComponent<UnitMovement>();
-        inventory = new UnitInventory();
         Blackboard = new UnitBlackboard();
 
         // 호환성용 UnitStats 생성
@@ -99,7 +100,7 @@ public class Unit : MonoBehaviour
             unitName = $"Unit_{UnityEngine.Random.Range(1000, 9999)}";
 
         currentHP = maxHP;
-        inventory.Initialize(1, 10);
+        inventory.Initialize(5, 5);  // ★ 5칸, 아이템당 최대 5개 스택
         Blackboard.Reset();
 
         _legacyStats.Initialize(maxHP);
@@ -246,5 +247,16 @@ public class Unit : MonoBehaviour
             }
         }
         return multiplier;
+    }
+
+    // ==================== 레벨 시스템 (확장용) ====================
+
+    /// <summary>
+    /// 레벨업 시 인벤토리 확장
+    /// </summary>
+    public void OnLevelUp(int newLevel)
+    {
+        // 레벨당 1칸씩 증가 (예시)
+        inventory.SetSlotsByLevel(newLevel, 1);
     }
 }

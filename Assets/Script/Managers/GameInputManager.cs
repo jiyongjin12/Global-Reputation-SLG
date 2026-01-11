@@ -50,14 +50,12 @@ public class GameInputManager : MonoBehaviour
 
     // ==================== 키 바인딩 ====================
 
-    /// <summary>
-    /// 기본 키 바인딩
-    /// </summary>
+    // 기본 키 바인딩
     private readonly Dictionary<GameAction, KeyCode> defaultBindings = new()
     {
         { GameAction.OpenChat, KeyCode.Return },
         { GameAction.OpenBuilding, KeyCode.B },
-        { GameAction.OpenInventory, KeyCode.I },        // ★ 추가
+        { GameAction.OpenInventory, KeyCode.I },        // 추가
         { GameAction.CloseUI, KeyCode.Escape },
         { GameAction.OpenSettings, KeyCode.Escape },
         { GameAction.MoveBuilding, KeyCode.C },
@@ -68,21 +66,15 @@ public class GameInputManager : MonoBehaviour
         { GameAction.QuickLoad, KeyCode.F9 },
     };
 
-    /// <summary>
-    /// 현재 키 바인딩 (설정에서 변경 가능)
-    /// </summary>
+    // 현재 키 바인딩 (설정에서 변경 가능)
     private Dictionary<GameAction, KeyCode> currentBindings = new();
 
     // ==================== ESC 우선순위 시스템 ====================
 
-    /// <summary>
-    /// ESC로 닫을 수 있는 UI 목록
-    /// </summary>
+    // ESC로 닫을 수 있는 UI 목록
     private List<IEscapableUI> escapableUIs = new();
 
-    /// <summary>
-    /// 현재 활성화된 모드 (배치, 이동, 삭제 등)
-    /// </summary>
+    // 현재 활성화된 모드 (배치, 이동, 삭제 등)
     private Action currentModeExitAction = null;
     private int currentModePriority = 0;
 
@@ -136,9 +128,7 @@ public class GameInputManager : MonoBehaviour
 
     // ==================== ESC 우선순위 처리 ====================
 
-    /// <summary>
-    /// ESC 키 처리 (우선순위 순서대로)
-    /// </summary>
+    // ESC 키 처리 (우선순위 순서대로)
     private void HandleEscapeKey()
     {
         if (showDebugLogs)
@@ -184,9 +174,7 @@ public class GameInputManager : MonoBehaviour
 
     // ==================== UI 등록/해제 ====================
 
-    /// <summary>
-    /// ESC로 닫을 수 있는 UI 등록
-    /// </summary>
+    // ESC로 닫을 수 있는 UI 등록
     public void RegisterEscapableUI(IEscapableUI ui)
     {
         if (!escapableUIs.Contains(ui))
@@ -198,17 +186,13 @@ public class GameInputManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// ESC로 닫을 수 있는 UI 해제
-    /// </summary>
+    // ESC로 닫을 수 있는 UI 해제
     public void UnregisterEscapableUI(IEscapableUI ui)
     {
         escapableUIs.Remove(ui);
     }
 
-    /// <summary>
-    /// 현재 모드 설정 (배치/이동/삭제 모드 진입 시)
-    /// </summary>
+    // 현재 모드 설정 (배치/이동/삭제 모드 진입 시)
     public void SetCurrentMode(Action exitAction, int priority = 50)
     {
         currentModeExitAction = exitAction;
@@ -218,51 +202,39 @@ public class GameInputManager : MonoBehaviour
             Debug.Log($"[GameInputManager] 모드 설정: Priority {priority}");
     }
 
-    /// <summary>
     /// 현재 모드 해제
-    /// </summary>
     public void ClearCurrentMode()
     {
         currentModeExitAction = null;
         currentModePriority = 0;
     }
 
-    /// <summary>
-    /// ★ 현재 모드가 활성화되어 있는지 확인
-    /// </summary>
+    // 현재 모드가 활성화되어 있는지 확인
     public bool HasActiveMode => currentModeExitAction != null;
 
     // ==================== 키 바인딩 관리 ====================
 
-    /// <summary>
-    /// 특정 액션의 키 가져오기
-    /// </summary>
+    // 특정 액션의 키 가져오기
     public KeyCode GetKeyForAction(GameAction action)
     {
         return currentBindings.TryGetValue(action, out var key) ? key : KeyCode.None;
     }
 
-    /// <summary>
-    /// 특정 액션이 눌렸는지 확인
-    /// </summary>
+    // 특정 액션이 눌렸는지 확인
     public bool GetActionDown(GameAction action)
     {
         var key = GetKeyForAction(action);
         return key != KeyCode.None && Input.GetKeyDown(key);
     }
 
-    /// <summary>
-    /// 특정 액션이 눌려있는지 확인
-    /// </summary>
+    // 특정 액션이 눌려있는지 확인
     public bool GetAction(GameAction action)
     {
         var key = GetKeyForAction(action);
         return key != KeyCode.None && Input.GetKey(key);
     }
 
-    /// <summary>
-    /// 키 바인딩 변경
-    /// </summary>
+    // 키 바인딩 변경
     public bool SetKeyBinding(GameAction action, KeyCode newKey)
     {
         // 중복 체크 (같은 키를 다른 액션에서 사용 중인지)
@@ -283,9 +255,7 @@ public class GameInputManager : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 기본 키 바인딩으로 초기화
-    /// </summary>
+    // 기본 키 바인딩으로 초기화
     public void ResetToDefaultBindings()
     {
         currentBindings.Clear();
@@ -298,17 +268,13 @@ public class GameInputManager : MonoBehaviour
         Debug.Log("[GameInputManager] 키 바인딩 초기화됨");
     }
 
-    /// <summary>
-    /// 모든 키 바인딩 가져오기 (설정 UI용)
-    /// </summary>
+    // 모든 키 바인딩 가져오기 (설정 UI용)
     public Dictionary<GameAction, KeyCode> GetAllBindings()
     {
         return new Dictionary<GameAction, KeyCode>(currentBindings);
     }
 
-    /// <summary>
-    /// 기본 키 바인딩 가져오기
-    /// </summary>
+    // 기본 키 바인딩 가져오기
     public KeyCode GetDefaultKey(GameAction action)
     {
         return defaultBindings.TryGetValue(action, out var key) ? key : KeyCode.None;
@@ -349,9 +315,7 @@ public class GameInputManager : MonoBehaviour
 
     // ==================== 헬퍼 ====================
 
-    /// <summary>
-    /// 키 이름 가져오기 (UI 표시용)
-    /// </summary>
+    // 키 이름 가져오기 (UI 표시용)
     public static string GetKeyDisplayName(KeyCode key)
     {
         return key switch

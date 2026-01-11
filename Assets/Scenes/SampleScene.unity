@@ -932,6 +932,51 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 243401734}
   m_CullTransparentMesh: 1
+--- !u!1 &277534364
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 277534365}
+  - component: {fileID: 277534366}
+  m_Layer: 0
+  m_Name: BuildingManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &277534365
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 277534364}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1862973937}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &277534366
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 277534364}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b4cb9a3814f730c4e9ef421b284af0e6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  showDebugLogs: 1
 --- !u!1 &290007796
 GameObject:
   m_ObjectHideFlags: 0
@@ -2404,8 +2449,7 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 1125739303}
+  m_Children: []
   m_Father: {fileID: 1862973937}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &676129582
@@ -2823,9 +2867,6 @@ MonoBehaviour:
   nameText: {fileID: 226171159}
   descriptionText: {fileID: 324993800}
   categoryText: {fileID: 2102908059}
-  amountText: {fileID: 0}
-  stackInfoText: {fileID: 0}
-  rarityBorder: {fileID: 0}
   animationDuration: 0.1
   startScale: 1.2
   normalScale: 1
@@ -4083,7 +4124,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 676129581}
+  m_Father: {fileID: 1862973937}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1125739304
 MonoBehaviour:
@@ -4511,7 +4552,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 54909258eca6737499eafa279d5ef136, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  apiConfig: {fileID: 11400000, guid: 96967d7d50b5a2447bd2cd24ba36dd18, type: 2}
+  apiConfig: {fileID: 11400000, guid: d0c0c00bc26b66247aeb296230b0c8b6, type: 2}
   localFilter: {fileID: 1174879780}
   targetLanguage: "\uC601\uC5B4"
 --- !u!114 &1174879778
@@ -6604,10 +6645,12 @@ Transform:
   - {fileID: 1384368852}
   - {fileID: 1761360646}
   - {fileID: 1080073316}
+  - {fileID: 1125739303}
   - {fileID: 676129581}
   - {fileID: 1847608543}
   - {fileID: 1174879776}
   - {fileID: 86120721}
+  - {fileID: 277534365}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1872160705
@@ -7267,7 +7310,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2101093266}
-  - component: {fileID: 2101093268}
   m_Layer: 0
   m_Name: UISystem
   m_TagString: Untagged
@@ -7295,19 +7337,6 @@ Transform:
   - {fileID: 297426677}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2101093268
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2101093265}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3722a5059f880c043907ddfcba24785a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  showDebugLogs: 0
 --- !u!1 &2102908057
 GameObject:
   m_ObjectHideFlags: 0
@@ -8382,7 +8411,6 @@ MonoBehaviour:
   borderImage: {fileID: 384438471450013050}
   amountText: {fileID: 6236501285459003041}
   normalBorderColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
-  hoverBorderColor: {r: 0.8, g: 0.8, b: 0.8, a: 1}
   selectedBorderColor: {r: 1, g: 0.2, b: 0.2, a: 1}
   scaleOnSelect: 1.05
   animDuration: 0.1

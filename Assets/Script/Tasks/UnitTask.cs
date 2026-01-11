@@ -7,15 +7,16 @@ using UnityEngine.AI;
 /// </summary>
 public enum TaskType
 {
-    Idle,           // 대기
-    MoveTo,         // 이동
-    Construct,      // 건설
-    Harvest,        // 채집 (나무, 돌 등)
-    PickupItem,     // 아이템 줍기
-    DeliverToStorage, // 창고에 저장
-    Eat,            // 음식 먹기
-    Attack,         // 공격
-    Flee            // 도망
+    Idle,
+    MoveTo,
+    Construct,
+    Harvest,
+    PickupItem,
+    DeliverToStorage,
+    Eat,
+    Attack,
+    Flee,
+    Workstation  // ★ 추가: 워크스테이션 작업
 }
 
 /// <summary>
@@ -23,10 +24,10 @@ public enum TaskType
 /// </summary>
 public enum TaskPriority
 {
-    Critical = 0,   // 생존 (먹기, 도망)
-    High = 1,       // 중요 작업
-    Normal = 2,     // 일반 작업
-    Low = 3         // 낮은 우선순위
+    Critical = 0,
+    High = 1,
+    Normal = 2,
+    Low = 3
 }
 
 /// <summary>
@@ -34,11 +35,11 @@ public enum TaskPriority
 /// </summary>
 public enum TaskState
 {
-    Pending,        // 대기 중
-    InProgress,     // 진행 중
-    Completed,      // 완료
-    Failed,         // 실패
-    Cancelled       // 취소됨
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+    Cancelled
 }
 
 /// <summary>
@@ -54,7 +55,6 @@ public abstract class UnitTask
     public Vector3 TargetPosition { get; protected set; }
     public GameObject TargetObject { get; protected set; }
 
-    // 이벤트
     public event Action<UnitTask> OnTaskCompleted;
     public event Action<UnitTask> OnTaskFailed;
 
@@ -107,10 +107,8 @@ public class MoveToTask : UnitTask
 
     public override void Execute(Unit unit)
     {
-        // 도착 안 했으면 계속 이동 명령 (경로 재설정)
         if (!IsComplete(unit))
         {
-            // 이미 이동 중이면 다시 호출 안 함
             if (!unit.Agent.hasPath || unit.Agent.remainingDistance < 0.1f)
             {
                 unit.MoveTo(TargetPosition);
@@ -120,14 +118,12 @@ public class MoveToTask : UnitTask
 
     public override bool IsComplete(Unit unit)
     {
-        // 방법 1: NavMeshAgent 기반 확인
         if (unit.HasArrivedAtDestination())
         {
             Debug.Log($"[MoveToTask] {unit.UnitName} 도착! (NavMesh 기준)");
             return true;
         }
 
-        // 방법 2: 수평 거리 기반 확인 (백업)
         Vector3 unitPos = unit.transform.position;
         Vector3 targetPos = TargetPosition;
 
@@ -154,7 +150,7 @@ public class ConstructTask : UnitTask
     private Building targetBuilding;
     private float workInterval = 1f;
     private float lastWorkTime;
-    private float workRange = 2f;  // 작업 가능 거리
+    private float workRange = 2f;
 
     public ConstructTask(Building building, TaskPriority priority = TaskPriority.Normal)
     {
@@ -176,7 +172,6 @@ public class ConstructTask : UnitTask
     {
         float distance = Vector3.Distance(unit.transform.position, TargetPosition);
 
-        // 거리 체크 - 너무 멀면 작업 안 함
         if (distance > workRange)
         {
             Debug.Log($"[ConstructTask] {unit.UnitName} 건물까지 거리: {distance:F1}m (작업 범위: {workRange}m) - 이동 중...");
@@ -227,13 +222,8 @@ public class HarvestTask : UnitTask
         if (Time.time - lastWorkTime >= workInterval)
         {
             float gatherPower = unit.Stats.GatherPower;
-
-            // 특성에 따른 보너스 체크
-            // TODO: 특성 시스템과 연동
-
             var drops = targetNode.Harvest(gatherPower);
 
-            // 드롭된 아이템을 바로 줍기 (인벤토리에 공간 있으면)
             foreach (var drop in drops)
             {
                 if (!unit.Inventory.IsFull)
@@ -370,13 +360,11 @@ public class EatFoodTask : UnitTask
         float dist = Vector3.Distance(unit.transform.position, TargetPosition);
         if (dist < 1f)
         {
-            // 음식 먹기
             if (targetFood.Resource != null && targetFood.Resource.IsFood)
             {
                 float nutrition = targetFood.Resource.NutritionValue * targetFood.Amount;
                 unit.Stats.Eat(nutrition);
 
-                // 체력 회복도 있으면 적용
                 if (targetFood.Resource.HealthRestore > 0)
                 {
                     unit.Stats.Heal(targetFood.Resource.HealthRestore * targetFood.Amount);
@@ -384,12 +372,11 @@ public class EatFoodTask : UnitTask
 
                 Debug.Log($"[EatFoodTask] {unit.UnitName} 음식 먹음! 영양: {nutrition}");
 
-                // AI에게 알림
                 var ai = unit.GetComponent<UnitAi>();
                 ai?.OnFoodEaten(nutrition);
             }
 
-            targetFood.PickUp(unit);  // 아이템 제거
+            targetFood.PickUp(unit);
             hasEaten = true;
         }
     }
@@ -417,7 +404,7 @@ public class WanderTask : UnitTask
 
     public WanderTask(Vector3 destination, float wanderDuration = 5f, TaskPriority priority = TaskPriority.Low)
     {
-        Type = TaskType.Idle;  // 서성이기는 Idle 타입으로 분류
+        Type = TaskType.Idle;
         Priority = priority;
         TargetPosition = destination;
         duration = wanderDuration;
@@ -441,7 +428,6 @@ public class WanderTask : UnitTask
 
     public override bool IsComplete(Unit unit)
     {
-        // 도착했거나 시간이 다 됐으면 완료
         return hasArrived || (Time.time - startTime >= duration);
     }
 }
@@ -476,5 +462,115 @@ public class IdleWaitTask : UnitTask
     public override bool IsComplete(Unit unit)
     {
         return Time.time - startTime >= duration;
+    }
+}
+
+// ==================== ★ 워크스테이션 작업 추가 ====================
+
+/// <summary>
+/// 워크스테이션 작업 (농경지, 작업장, 주방 등)
+/// </summary>
+public class WorkstationTask : UnitTask
+{
+    private IWorkstation workstation;
+    private Building building;
+    private float workInterval = 1f;
+    private float lastWorkTime;
+    private float workRange = 1.5f;
+    private bool isWorkStarted = false;
+
+    public WorkstationTask(IWorkstation ws, TaskPriority priority = TaskPriority.Normal)
+    {
+        Type = TaskType.Workstation;
+        Priority = priority;
+        workstation = ws;
+
+        var component = ws as MonoBehaviour;
+        if (component != null)
+        {
+            TargetObject = component.gameObject;
+            TargetPosition = ws.WorkPoint?.position ?? component.transform.position;
+            building = component.GetComponent<Building>();
+        }
+
+        Debug.Log($"[WorkstationTask] 워크스테이션 작업 생성: {ws.TaskType}");
+    }
+
+    public override void Start(Unit unit)
+    {
+        base.Start(unit);
+
+        if (!workstation.AssignWorker(unit))
+        {
+            Debug.LogWarning($"[WorkstationTask] 작업자 배정 실패!");
+            State = TaskState.Failed;
+            return;
+        }
+
+        Debug.Log($"[WorkstationTask] {unit.UnitName} 워크스테이션 작업 시작: {workstation.TaskType}");
+    }
+
+    public override void Execute(Unit unit)
+    {
+        if (workstation == null)
+        {
+            State = TaskState.Failed;
+            return;
+        }
+
+        float distance = Vector3.Distance(unit.transform.position, TargetPosition);
+
+        // 작업 위치로 이동
+        if (distance > workRange)
+        {
+            unit.MoveTo(TargetPosition);
+            return;
+        }
+
+        // 작업 시작
+        if (!isWorkStarted)
+        {
+            workstation.StartWork();
+            isWorkStarted = true;
+        }
+
+        // 작업 수행
+        if (Time.time - lastWorkTime >= workInterval)
+        {
+            float workAmount = unit.DoWork();
+            workstation.DoWork(workAmount);
+            lastWorkTime = Time.time;
+        }
+    }
+
+    public override bool IsComplete(Unit unit)
+    {
+        if (workstation == null)
+            return true;
+
+        // 작업 완료 체크
+        if (!workstation.CanStartWork && !workstation.IsOccupied)
+            return true;
+
+        // 작업 중이 아니면 완료
+        var component = workstation as WorkstationComponent;
+        if (component != null && !component.IsWorking && isWorkStarted)
+            return true;
+
+        return false;
+    }
+
+    public override void Complete(Unit unit)
+    {
+        base.Complete(unit);
+        workstation?.ReleaseWorker();
+        Debug.Log($"[WorkstationTask] {unit.UnitName} 워크스테이션 작업 완료!");
+    }
+
+    public override void Cancel()
+    {
+        base.Cancel();
+        workstation?.CancelWork();
+        workstation?.ReleaseWorker();
     }
 }

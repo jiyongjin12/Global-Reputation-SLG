@@ -17,11 +17,11 @@ public class InventoryInfoPanel : MonoBehaviour
     [SerializeField] private TextMeshProUGUI nameText;           // 아이템 이름
     [SerializeField] private TextMeshProUGUI descriptionText;    // 아이템 설명
     [SerializeField] private TextMeshProUGUI categoryText;       // 카테고리
-    [SerializeField] private TextMeshProUGUI amountText;         // 보유량
+    //[SerializeField] private TextMeshProUGUI amountText;         // 보유량
 
-    [Header("=== Optional ===")]
-    [SerializeField] private TextMeshProUGUI stackInfoText;      // 스택 정보 (예: 최대 99개)
-    [SerializeField] private Image rarityBorder;                 // 희귀도 테두리 (선택사항)
+    //[Header("=== Optional ===")]
+    //[SerializeField] private TextMeshProUGUI stackInfoText;      // 스택 정보 (예: 최대 99개)
+    //[SerializeField] private Image rarityBorder;                 // 희귀도 테두리 (선택사항)
 
     [Header("=== Card Animation ===")]
     [SerializeField] private float animationDuration = 0.1f;
@@ -140,16 +140,16 @@ public class InventoryInfoPanel : MonoBehaviour
         }
 
         // 보유량
-        if (amountText != null)
-        {
-            amountText.text = $"보유: {stored.Amount}개";
-        }
+        //if (amountText != null)
+        //{
+        //    amountText.text = $"보유: {stored.Amount}개";
+        //}
 
         // 스택 정보 (선택사항)
-        if (stackInfoText != null)
-        {
-            stackInfoText.text = $"최대 스택: {item.MaxStackSize}개";
-        }
+        //if (stackInfoText != null)
+        //{
+        //    stackInfoText.text = $"최대 스택: {item.MaxStackSize}개";
+        //}
     }
 
     /// <summary>
@@ -243,9 +243,9 @@ public class InventoryInfoPanel : MonoBehaviour
     /// </summary>
     public void RefreshAmount()
     {
-        if (currentResource != null && amountText != null)
-        {
-            amountText.text = $"보유: {currentResource.Amount}개";
-        }
+        //if (currentResource != null && amountText != null)
+        //{
+        //    amountText.text = $"보유: {currentResource.Amount}개";
+        //}
     }
 }

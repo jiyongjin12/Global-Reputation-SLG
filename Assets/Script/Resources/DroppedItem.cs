@@ -8,6 +8,7 @@ using UnityEngine;
 /// - 바닥에서 통통 튀는 효과 (스케일은 Y위치에 비례)
 /// - 자석 흡수는 옵션 (특성용)
 /// - 소유권 시스템: 채집한 유닛이 우선 줍기
+/// - ★ 부분 흡수: 인벤토리 공간만큼만 흡수, 나머지는 땅에 남음
 /// </summary>
 public class DroppedItem : MonoBehaviour
 {
@@ -90,6 +91,11 @@ public class DroppedItem : MonoBehaviour
     // 소유권 시스템
     private Unit owner = null;
     private float ownershipTimer = 0f;
+
+    // ★ 남은 아이템 생성용 프리팹 참조
+    [Header("=== 남은 아이템 드롭 ===")]
+    [Tooltip("부분 흡수 시 남은 아이템을 위한 프리팹 (비워두면 자기 자신 복제)")]
+    [SerializeField] private GameObject droppedItemPrefab;
 
     // Properties
     public ResourceItemSO Resource => resource;
@@ -280,29 +286,23 @@ public class DroppedItem : MonoBehaviour
             transform.position = position;
             ApplyImpactSquash();
 
-            // 바운스 종료 체크
-            if (Mathf.Abs(velocity.y) < minBounceVelocity)
-                break;
-
-            // 바운스! (위로 튀어오르기)
-            float bounceVelocity = Mathf.Abs(velocity.y) * bounceDecay;
-            velocity.y = bounceVelocity;
-            velocity.x *= bounceDecay;
-            velocity.z *= bounceDecay;
+            yield return new WaitForSeconds(0.03f);
 
             bounceCount++;
 
-            // 실제 바운스 - 위로 올라갔다가 내려오기
-            while (true)
+            // 바운스
+            velocity.y = -velocity.y * bounceDecay;
+
+            if (Mathf.Abs(velocity.y) < minBounceVelocity)
+                break;
+
+            // 상승
+            while (velocity.y > 0 || position.y > groundY)
             {
                 velocity.y -= gravity * Time.deltaTime;
                 position += velocity * Time.deltaTime;
                 velocity.x *= 0.99f;
                 velocity.z *= 0.99f;
-
-                // 바닥 아래로 내려가지 않게
-                if (position.y < groundY)
-                    position.y = groundY;
 
                 transform.position = position;
 
@@ -323,19 +323,22 @@ public class DroppedItem : MonoBehaviour
         transform.localScale = originalScale;
 
         isAnimating = false;
+
+        // ★ 바닥 튕기기 완료 → 이제 흡수 가능
+        if (enableMagnet)
+        {
+            isReadyForMagnet = true;
+        }
+
         OnAnimationComplete?.Invoke(this);
     }
 
     /// <summary>
-    /// 속도 기반 탄성 스케일:
-    /// - 낙하 (velocity < 0): 납작 (스쿼시)
-    /// - 상승 (velocity > 0): 길쭉 (스트레치)
-    /// - 정지 (velocity ≈ 0): 원래 스케일
+    /// 속도 기반 탄성 스케일
     /// </summary>
     private void UpdateScaleByVelocity(float velocityY)
     {
-        // 속도를 -1 ~ 1 범위로 정규화 (maxVelocity 기준)
-        float maxVelocity = launchHeight; // 최대 속도 = 초기 발사 속도
+        float maxVelocity = launchHeight;
         float normalizedVelocity = Mathf.Clamp(velocityY / maxVelocity, -1f, 1f);
 
         float scaleY;
@@ -343,21 +346,18 @@ public class DroppedItem : MonoBehaviour
 
         if (normalizedVelocity < 0)
         {
-            // 떨어지는 중: 납작해짐 (Y 줄고, XZ 넓어짐)
             float squash = Mathf.Abs(normalizedVelocity) * maxSquashAmount;
-            scaleY = 1f - squash;           // 예: 1 - 0.5 = 0.5
-            scaleXZ = 1f + squash * 0.6f;   // 예: 1 + 0.3 = 1.3
+            scaleY = 1f - squash;
+            scaleXZ = 1f + squash * 0.6f;
         }
         else if (normalizedVelocity > 0)
         {
-            // 튀어오르는 중: 길쭉해짐 (Y 늘고, XZ 줄어듦)
             float stretch = normalizedVelocity * maxSquashAmount * 0.5f;
-            scaleY = 1f + stretch;          // 예: 1 + 0.25 = 1.25
-            scaleXZ = 1f - stretch * 0.4f;  // 예: 1 - 0.1 = 0.9
+            scaleY = 1f + stretch;
+            scaleXZ = 1f - stretch * 0.4f;
         }
         else
         {
-            // 정지: 원래 스케일
             scaleY = 1f;
             scaleXZ = 1f;
         }
@@ -370,11 +370,11 @@ public class DroppedItem : MonoBehaviour
     }
 
     /// <summary>
-    /// 바닥 충돌 시 스쿼시 효과 (순간적으로 확 납작)
+    /// 바닥 충돌 시 스쿼시 효과
     /// </summary>
     private void ApplyImpactSquash()
     {
-        float scaleY = 1f - maxSquashAmount;      // 최대 납작
+        float scaleY = 1f - maxSquashAmount;
         float scaleXZ = 1f + maxSquashAmount * 0.7f;
 
         transform.localScale = new Vector3(
@@ -386,9 +386,15 @@ public class DroppedItem : MonoBehaviour
 
     // ==================== 자석 흡수 (특성용) ====================
 
+    // ★ 흡수 준비 완료 상태 (바닥 튕기기 완료 후)
+    [SerializeField] private bool isReadyForMagnet = false;
+
     private void TryFindMagnetTarget()
     {
         if (!enableMagnet) return;
+
+        // ★ 바닥 튕기기 완료 후에만 흡수 가능
+        if (!isReadyForMagnet) return;
 
         var colliders = Physics.OverlapSphere(transform.position, magnetRadius);
 
@@ -398,7 +404,10 @@ public class DroppedItem : MonoBehaviour
         foreach (var col in colliders)
         {
             var unit = col.GetComponent<Unit>();
-            if (unit == null || !unit.IsAlive || unit.Inventory.IsFull) continue;
+            if (unit == null || !unit.IsAlive) continue;
+
+            // ★ 해당 아이템을 받을 수 있는지 확인
+            if (!unit.Inventory.CanAddAny(resource)) continue;
 
             // 개인 소유면 Owner만 자석 대상
             if (!isPublic && owner != unit) continue;
@@ -413,7 +422,130 @@ public class DroppedItem : MonoBehaviour
 
         if (nearestUnit != null)
         {
-            StartMagnetWithWindup(nearestUnit);
+            // ★ 필요한 만큼만 흡수
+            int availableSpace = nearestUnit.Inventory.GetAvailableSpaceFor(resource);
+            int absorbAmount = Mathf.Min(amount, availableSpace);
+
+            if (absorbAmount <= 0) return;
+
+            StartPartialMagnet(nearestUnit, absorbAmount);
+        }
+    }
+
+    /// <summary>
+    /// ★ 부분 흡수 시작 - 필요한 양만 분리해서 흡수
+    /// </summary>
+    private void StartPartialMagnet(Unit target, int absorbAmount)
+    {
+        int remaining = amount - absorbAmount;
+
+        if (remaining > 0)
+        {
+            // ★ 남은 양으로 업데이트 (원본은 바닥에 남음)
+            amount = remaining;
+
+            // ★ 흡수할 양만큼 새 아이템 생성해서 흡수 애니메이션
+            SpawnAndAbsorb(target, absorbAmount);
+        }
+        else
+        {
+            // 전체 흡수 - 기존 방식
+            isBeingMagneted = true;
+            isReserved = true;
+            reservedBy = target;
+            magnetCoroutine = StartCoroutine(MagnetCoroutineSimple(target, amount));
+        }
+    }
+
+    /// <summary>
+    /// ★ 흡수할 양만큼 새 아이템 생성해서 흡수 애니메이션
+    /// </summary>
+    private void SpawnAndAbsorb(Unit target, int absorbAmount)
+    {
+        // 같은 위치에 새 DroppedItem 생성
+        GameObject prefab = droppedItemPrefab != null ? droppedItemPrefab : gameObject;
+        GameObject newItemObj = Instantiate(prefab, transform.position, Quaternion.identity);
+        DroppedItem newItem = newItemObj.GetComponent<DroppedItem>();
+
+        if (newItem != null)
+        {
+            newItem.Initialize(resource, absorbAmount);
+            newItem.enableMagnet = true;
+            newItem.isAnimating = false;
+            newItem.isReadyForMagnet = false;  // 즉시 흡수 시작
+            newItem.isPublic = isPublic;
+            newItem.owner = owner;
+            newItemObj.transform.localScale = originalScale;
+
+            // 새 아이템이 흡수 애니메이션 수행
+            newItem.isBeingMagneted = true;
+            newItem.isReserved = true;
+            newItem.reservedBy = target;
+            newItem.magnetCoroutine = newItem.StartCoroutine(newItem.MagnetCoroutineSimple(target, absorbAmount));
+
+            Debug.Log($"[DroppedItem] 부분 흡수: {resource?.ResourceName} x{absorbAmount} → {target.UnitName}, 남음: {amount}");
+        }
+    }
+
+    /// <summary>
+    /// ★ 간단한 흡수 코루틴 (부분 흡수용)
+    /// </summary>
+    private IEnumerator MagnetCoroutineSimple(Unit target, int absorbAmount)
+    {
+        Vector3 startPos = transform.position;
+        Vector3 targetPos = target.transform.position + Vector3.up * 0.5f;
+
+        Vector3 awayDirection = (startPos - targetPos).normalized;
+        awayDirection.y = 0;
+
+        // 윈드업 (뒤로 빠지면서 위로)
+        Vector3 windupTarget = startPos + awayDirection * windupBackDistance + Vector3.up * windupUpDistance;
+
+        float timer = 0f;
+        while (timer < windupDuration)
+        {
+            if (target == null || !target.IsAlive) { CancelMagnet(); yield break; }
+
+            timer += Time.deltaTime;
+            float t = timer / windupDuration;
+            transform.position = Vector3.Lerp(startPos, windupTarget, EaseOutQuad(t));
+            transform.localScale = originalScale * (1f + 0.15f * Mathf.Sin(t * Mathf.PI));
+
+            yield return null;
+        }
+
+        // 빨려들어오기 (베지어 곡선)
+        Vector3 pullStartPos = transform.position;
+        timer = 0f;
+
+        while (timer < magnetPullDuration)
+        {
+            if (target == null || !target.IsAlive) { CancelMagnet(); yield break; }
+
+            timer += Time.deltaTime;
+            float t = timer / magnetPullDuration;
+
+            targetPos = target.transform.position + Vector3.up * 0.5f;
+            float easedT = EaseInQuad(t);
+
+            Vector3 midPoint = (pullStartPos + targetPos) / 2f + Vector3.up * 0.4f;
+            transform.position = QuadraticBezier(pullStartPos, midPoint, targetPos, easedT);
+            transform.localScale = originalScale * Mathf.Max(0.1f, 1f - 0.7f * easedT);
+
+            yield return null;
+        }
+
+        // ★ 인벤토리에 추가 (이미 정해진 양만)
+        if (target != null && target.IsAlive)
+        {
+            target.Inventory.AddItem(resource, absorbAmount);
+            Debug.Log($"[DroppedItem] 흡수 완료: {resource?.ResourceName} x{absorbAmount}");
+            OnPickedUp?.Invoke(this);
+            Destroy(gameObject);
+        }
+        else
+        {
+            CancelMagnet();
         }
     }
 
@@ -455,7 +587,10 @@ public class DroppedItem : MonoBehaviour
 
         while (timer < magnetPullDuration)
         {
-            if (target == null || !target.IsAlive || target.Inventory.IsFull) { CancelMagnet(); yield break; }
+            if (target == null || !target.IsAlive) { CancelMagnet(); yield break; }
+
+            // ★ 공간 체크 - 중간에 공간이 없어지면 취소
+            if (!target.Inventory.CanAddAny(resource)) { CancelMagnet(); yield break; }
 
             timer += Time.deltaTime;
             float t = timer / magnetPullDuration;
@@ -470,16 +605,75 @@ public class DroppedItem : MonoBehaviour
             yield return null;
         }
 
-        // 인벤토리에 추가
-        if (target != null && target.IsAlive && !target.Inventory.IsFull)
+        // ★ 부분 흡수 처리
+        if (target != null && target.IsAlive)
         {
-            target.Inventory.AddItem(resource, amount);
+            int availableSpace = target.Inventory.GetAvailableSpaceFor(resource);
+
+            if (availableSpace <= 0)
+            {
+                // 공간이 없으면 취소
+                CancelMagnet();
+                yield break;
+            }
+
+            int amountToAbsorb = Mathf.Min(amount, availableSpace);
+            int remaining = amount - amountToAbsorb;
+
+            // 흡수할 수 있는 만큼만 인벤토리에 추가
+            target.Inventory.AddItem(resource, amountToAbsorb);
+            Debug.Log($"[DroppedItem] {resource?.ResourceName} x{amountToAbsorb} 흡수 (남은 공간: {availableSpace}, 남은 아이템: {remaining})");
+
+            // ★ 남은 아이템이 있으면 새로운 DroppedItem 생성
+            if (remaining > 0)
+            {
+                SpawnRemainingItem(remaining, target);
+            }
+
             OnPickedUp?.Invoke(this);
             Destroy(gameObject);
         }
         else
         {
             CancelMagnet();
+        }
+    }
+
+    /// <summary>
+    /// ★ 남은 아이템 드롭 (부분 흡수 시)
+    /// </summary>
+    private void SpawnRemainingItem(int remainingAmount, Unit nearUnit)
+    {
+        // 드롭 위치 계산 (유닛 근처에 떨어뜨림)
+        Vector3 dropPos = transform.position;
+        if (nearUnit != null)
+        {
+            dropPos = nearUnit.transform.position + UnityEngine.Random.insideUnitSphere * 0.5f;
+            dropPos.y = groundY;
+        }
+
+        // 프리팹으로 생성하거나 자기 복제
+        GameObject prefab = droppedItemPrefab != null ? droppedItemPrefab : gameObject;
+
+        // 새 아이템 생성
+        GameObject newItemObj = Instantiate(prefab, dropPos, Quaternion.identity);
+        DroppedItem newItem = newItemObj.GetComponent<DroppedItem>();
+
+        if (newItem != null)
+        {
+            newItem.Initialize(resource, remainingAmount);
+            newItem.isPublic = true;  // 남은 아이템은 공용
+            newItem.owner = null;
+            newItem.enableMagnet = enableMagnet;
+
+            // 애니메이션 없이 바로 땅에
+            newItem.isAnimating = false;
+            newItemObj.transform.localScale = originalScale;
+
+            Debug.Log($"[DroppedItem] 남은 아이템 생성: {resource?.ResourceName} x{remainingAmount}");
+
+            // TaskManager에 등록
+            TaskManager.Instance?.AddPickupItemTask(newItem);
         }
     }
 
@@ -535,6 +729,46 @@ public class DroppedItem : MonoBehaviour
         Debug.Log($"[DroppedItem] {resource?.ResourceName} x{amount} picked up by {unit.UnitName}");
         Destroy(gameObject);
         return true;
+    }
+
+    /// <summary>
+    /// ★ 부분 줍기 (들어갈 수 있는 만큼만)
+    /// </summary>
+    /// <returns>실제로 주운 양</returns>
+    public int PickUpPartial(Unit unit)
+    {
+        if (isBeingCarried) return 0;
+        if (isReserved && reservedBy != unit) return 0;
+        if (!CanBePickedUpBy(unit)) return 0;
+
+        int availableSpace = unit.Inventory.GetAvailableSpaceFor(resource);
+        if (availableSpace <= 0) return 0;
+
+        int amountToPickUp = Mathf.Min(amount, availableSpace);
+        int remaining = amount - amountToPickUp;
+
+        // 인벤토리에 추가
+        unit.Inventory.AddItem(resource, amountToPickUp);
+
+        if (remaining > 0)
+        {
+            // 남은 양으로 업데이트
+            amount = remaining;
+            Debug.Log($"[DroppedItem] {unit.UnitName} 부분 줍기: {resource?.ResourceName} x{amountToPickUp}, 남음: {remaining}");
+            return amountToPickUp;
+        }
+        else
+        {
+            // 전부 주웠으면 삭제
+            isBeingCarried = true;
+            if (magnetCoroutine != null)
+                StopCoroutine(magnetCoroutine);
+
+            OnPickedUp?.Invoke(this);
+            Debug.Log($"[DroppedItem] {resource?.ResourceName} x{amountToPickUp} picked up by {unit.UnitName}");
+            Destroy(gameObject);
+            return amountToPickUp;
+        }
     }
 
     // ==================== 이징 함수 ====================

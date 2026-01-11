@@ -6,14 +6,30 @@ public class Building : MonoBehaviour
     [SerializeField] private ObjectData data;
     [SerializeField] private BuildingState currentState = BuildingState.Blueprint;
 
+    [Header("=== 작업 지점 ===")]
+    [Tooltip("Unit이 작업할 때 서 있을 위치 (없으면 자동 생성)")]
+    [SerializeField] private Transform workPoint;
+
+    [Tooltip("생산된 아이템이 드롭될 위치 (없으면 자동 생성)")]
+    [SerializeField] private Transform dropPoint;
+
     private float currentConstructionWork = 0f;
     private GameObject currentVisual;
     private PostedTask constructionTask;
     private bool isInitialized = false;
 
+    // ★ 캐시된 컴포넌트
+    private IWorkstation _workstation;
+    private IProducer _producer;
+    private IStorage _storage;
+    private IHarvestable _harvestable;
+    private IAutoProducer _autoProducer;
+    private IInteractable _interactable;
+
     public event Action<Building> OnConstructionComplete;
     public event Action<Building, float> OnConstructionProgress;
 
+    // 기존 Properties
     public ObjectData Data => data;
     public BuildingState CurrentState => currentState;
     public Vector3Int GridPosition { get; private set; }
@@ -21,6 +37,61 @@ public class Building : MonoBehaviour
     public bool IsInitialized => isInitialized;
     public float ConstructionProgress => data != null && data.ConstructionWorkRequired > 0
         ? currentConstructionWork / data.ConstructionWorkRequired : 1f;
+
+    // ★ 새 Properties
+    public Transform WorkPoint => workPoint;
+    public Transform DropPoint => dropPoint;
+
+    // 컴포넌트 접근
+    public IWorkstation Workstation => _workstation;
+    public IProducer Producer => _producer;
+    public IStorage Storage => _storage;
+    public IHarvestable Harvestable => _harvestable;
+    public IAutoProducer AutoProducer => _autoProducer;
+    public IInteractable Interactable => _interactable;
+
+    // 기능 체크
+    public bool HasWorkstation => _workstation != null;
+    public bool HasProducer => _producer != null;
+    public bool HasStorage => _storage != null;
+    public bool HasHarvestable => _harvestable != null;
+    public bool HasAutoProducer => _autoProducer != null;
+    public bool IsInteractable => _interactable != null;
+
+    private void Awake()
+    {
+        CacheComponents();
+        EnsureRequiredPoints();
+    }
+
+    private void CacheComponents()
+    {
+        _workstation = GetComponent<IWorkstation>();
+        _producer = GetComponent<IProducer>();
+        _storage = GetComponent<IStorage>();
+        _harvestable = GetComponent<IHarvestable>();
+        _autoProducer = GetComponent<IAutoProducer>();
+        _interactable = GetComponent<IInteractable>();
+    }
+
+    private void EnsureRequiredPoints()
+    {
+        if (workPoint == null)
+        {
+            GameObject wp = new GameObject("WorkPoint");
+            wp.transform.SetParent(transform);
+            wp.transform.localPosition = new Vector3(0, 0, -1f);
+            workPoint = wp.transform;
+        }
+
+        if (dropPoint == null)
+        {
+            GameObject dp = new GameObject("DropPoint");
+            dp.transform.SetParent(transform);
+            dp.transform.localPosition = new Vector3(0, 0.5f, 0);
+            dropPoint = dp.transform;
+        }
+    }
 
     public void Initialize(ObjectData objectData, Vector3Int gridPos, bool instantBuild = false)
     {
@@ -34,6 +105,10 @@ public class Building : MonoBehaviour
         GridPosition = gridPos;
         isInitialized = true;
 
+        // ★ 컴포넌트 캐시 (Awake 전에 Initialize 호출될 경우 대비)
+        if (_workstation == null)
+            CacheComponents();
+
         if (instantBuild || data.ConstructionWorkRequired <= 0)
         {
             CompleteConstruction();
@@ -46,36 +121,23 @@ public class Building : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// ★ Grid 위치 업데이트 (이동 시 사용)
-    /// </summary>
     public void UpdateGridPosition(Vector3Int newGridPosition)
     {
         GridPosition = newGridPosition;
         Debug.Log($"[Building] {data?.Name} GridPosition 업데이트: {newGridPosition}");
     }
 
-    /// <summary>
-    /// ★ Task 위치 업데이트 (건물 이동 시 호출)
-    /// - 건설 작업의 목표 위치를 새 위치로 변경
-    /// - 작업 중인 유닛들의 작업 위치도 재계산
-    /// </summary>
     public void UpdateTaskLocation(Vector3 newWorldPosition)
     {
         if (constructionTask == null) return;
 
-        // 1. TaskData의 위치 업데이트
         constructionTask.Data.TargetPosition = newWorldPosition;
-
-        // 2. 건물 크기 가져오기
         Vector2Int size = data?.Size ?? Vector2Int.one;
 
-        // 3. 작업 중인 유닛들의 작업 위치 업데이트
         foreach (var unit in constructionTask.AssignedUnits)
         {
             if (unit != null && unit.IsAlive)
             {
-                // ★ UnitAI의 작업 위치 재계산
                 var unitAI = unit.GetComponent<UnitAi>();
                 if (unitAI != null)
                 {
@@ -83,7 +145,6 @@ public class Building : MonoBehaviour
                 }
                 else
                 {
-                    // UnitAI 없으면 단순히 MoveTo
                     unit.MoveTo(newWorldPosition);
                 }
             }
@@ -92,14 +153,8 @@ public class Building : MonoBehaviour
         Debug.Log($"[Building] {data?.Name} Task 위치 업데이트: {newWorldPosition}, 유닛 {constructionTask.AssignedUnits.Count}명");
     }
 
-    /// <summary>
-    /// ★ 건설 Task 가져오기 (외부에서 확인용)
-    /// </summary>
     public PostedTask GetConstructionTask() => constructionTask;
 
-    /// <summary>
-    /// 스스로 TaskManager에 등록
-    /// </summary>
     private void RegisterConstructionTask()
     {
         if (TaskManager.Instance == null) return;
@@ -107,7 +162,7 @@ public class Building : MonoBehaviour
         var taskData = new TaskData(TaskType.Construct, transform.position, gameObject)
         {
             Priority = TaskPriority.Normal,
-            MaxWorkers = Mathf.Clamp(data.Size.x * data.Size.y + 1, 2, 4), // ★ 1x1=2명, 2x2=4명
+            MaxWorkers = Mathf.Clamp(data.Size.x * data.Size.y + 1, 2, 4),
             WorkRequired = data.ConstructionWorkRequired
         };
 
@@ -150,6 +205,9 @@ public class Building : MonoBehaviour
             constructionTask = null;
         }
 
+        // ★ BuildingManager에 등록
+        BuildingManager.Instance?.RegisterBuilding(this);
+
         OnConstructionComplete?.Invoke(this);
         Debug.Log($"[Building] {data?.Name} 건설 완료!");
     }
@@ -175,6 +233,9 @@ public class Building : MonoBehaviour
         if (constructionTask != null)
             TaskManager.Instance?.CancelTask(constructionTask);
 
+        // ★ BuildingManager에서 제거
+        BuildingManager.Instance?.UnregisterBuilding(this);
+
         GridDataManager.Instance?.RemoveObject(GridPosition);
         Destroy(gameObject);
     }
@@ -183,5 +244,45 @@ public class Building : MonoBehaviour
     {
         if (constructionTask != null)
             TaskManager.Instance?.CancelTask(constructionTask);
+
+        // ★ BuildingManager에서 제거
+        BuildingManager.Instance?.UnregisterBuilding(this);
     }
+
+    // ★ 유틸리티 메서드
+    public T GetBuildingComponent<T>() where T : class
+    {
+        return GetComponent<T>();
+    }
+
+    public Vector3 GetWorldCenter()
+    {
+        if (data != null)
+        {
+            return new Vector3(
+                GridPosition.x + data.Size.x * 0.5f,
+                0,
+                GridPosition.z + data.Size.y * 0.5f
+            );
+        }
+        return transform.position;
+    }
+
+#if UNITY_EDITOR
+    private void OnDrawGizmosSelected()
+    {
+        if (workPoint != null)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(workPoint.position, 0.3f);
+            Gizmos.DrawLine(transform.position, workPoint.position);
+        }
+
+        if (dropPoint != null)
+        {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawWireSphere(dropPoint.position, 0.2f);
+        }
+    }
+#endif
 }
