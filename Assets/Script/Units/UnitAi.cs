@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+ï»¿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -12,9 +12,9 @@ public enum AIBehaviorState
     Working,
     PickingUpItem,
     DeliveringToStorage,
-    WaitingForStorage,  // ¡Ú ÀúÀå°í ´ë±â »óÅÂ
+    WaitingForStorage,  // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     ExecutingCommand,
-    WorkingAtStation  // ¡Ú Ãß°¡
+    WorkingAtStation  // ï¿½ï¿½ ï¿½ß°ï¿½
 }
 
 public enum TaskPriorityLevel
@@ -22,7 +22,7 @@ public enum TaskPriorityLevel
     PlayerCommand = 0,
     Survival = 1,
     Construction = 2,
-    Workstation = 3,  // ¡Ú Ãß°¡
+    Workstation = 3,  // ï¿½ï¿½ ï¿½ß°ï¿½
     ItemPickup = 4,
     Harvest = 5,
     FreeWill = 6
@@ -37,13 +37,13 @@ public enum TaskPhase
 }
 
 /// <summary>
-/// ÀúÀå°í ¹è´Ş ´Ü°è
+/// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½Ü°ï¿½
 /// </summary>
 public enum DeliveryPhase
 {
     None,
-    MovingToStorage,    // ÀúÀå°í·Î ÀÌµ¿ Áß
-    Depositing          // ÀúÀå Áß
+    MovingToStorage,    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½ï¿½
+    Depositing          // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
 }
 
 // ==================== Main Class ====================
@@ -96,22 +96,22 @@ public class UnitAi : MonoBehaviour
 
     // ==================== Fields ====================
 
-    [Header("=== ±âº» ¼³Á¤ ===")]
+    [Header("=== ï¿½âº» ï¿½ï¿½ï¿½ï¿½ ===")]
     [SerializeField] private float decisionInterval = 0.5f;
     [SerializeField] private float workRadius = 0.8f;
     [SerializeField] private float wanderRadius = 10f;
 
-    [Header("=== ¹è°íÇÄ ¼³Á¤ ===")]
+    [Header("=== ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ===")]
     [SerializeField] private float hungerDecreasePerMinute = 3f;
     [SerializeField] private float foodSearchRadius = 20f;
     [SerializeField] private float hungerSeekThreshold = 50f;
     [SerializeField] private float hungerCriticalThreshold = 20f;
 
-    [Header("=== ¾ÆÀÌÅÛ Áİ±â ¼³Á¤ ===")]
+    [Header("=== ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½İ±ï¿½ ï¿½ï¿½ï¿½ï¿½ ===")]
     [SerializeField] private float itemPickupDuration = 1f;
     [SerializeField] private float pickupRadius = 1.5f;
 
-    [Header("=== µğ¹ö±× ===")]
+    [Header("=== ï¿½ï¿½ï¿½ï¿½ï¿½ ===")]
     [SerializeField] private AIBehaviorState currentBehavior = AIBehaviorState.Idle;
     [SerializeField] private TaskPriorityLevel currentPriority = TaskPriorityLevel.FreeWill;
 
@@ -127,17 +127,17 @@ public class UnitAi : MonoBehaviour
     private List<DroppedItem> personalItems = new();
     private DroppedItem currentPersonalItem;
 
-    // ¡Ú ¿öÅ©½ºÅ×ÀÌ¼Ç ÀÛ¾÷¿ë
+    // ï¿½ï¿½ ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½
     private IWorkstation currentWorkstation;
     private bool isWorkstationWorkStarted = false;
 
-    // ¡Ú ÀúÀå°í ¹è´Ş¿ë
+    // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ş¿ï¿½
     private DeliveryPhase deliveryPhase = DeliveryPhase.None;
     private Vector3 storagePosition;
     private StorageComponent targetStorage;
     private float depositTimer = 0f;
-    [Header("=== ÀúÀå°í ¹è´Ş ¼³Á¤ ===")]
-    [SerializeField] private float depositDuration = 2f;  // ÀúÀå¿¡ °É¸®´Â ½Ã°£
+    [Header("=== ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ===")]
+    [SerializeField] private float depositDuration = 2f;  // ï¿½ï¿½ï¿½å¿¡ ï¿½É¸ï¿½ï¿½ï¿½ ï¿½Ã°ï¿½
     [SerializeField] private float storageSearchRadius = 50f;
 
     private Vector3 debugBuildingCenter;
@@ -150,10 +150,10 @@ public class UnitAi : MonoBehaviour
     public bool HasTask => taskContext.HasTask;
     public bool IsIdle => currentBehavior == AIBehaviorState.Idle || currentBehavior == AIBehaviorState.Wandering;
 
-    // ¡Ú ÀúÀå°í Á¸Àç ¿©ºÎ Ä³½Ã
+    // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ä³ï¿½ï¿½
     private bool hasStorageBuilding = false;
     private float lastStorageCheckTime = -10f;
-    private const float STORAGE_CHECK_INTERVAL = 5f;  // 5ÃÊ¸¶´Ù Ã¼Å©
+    private const float STORAGE_CHECK_INTERVAL = 5f;  // 5ï¿½Ê¸ï¿½ï¿½ï¿½ Ã¼Å©
 
     // ==================== Unity Methods ====================
 
@@ -184,10 +184,106 @@ public class UnitAi : MonoBehaviour
             lastDecisionTime = Time.time;
         }
 
+        // â˜… ìì„ ì•„ì´í…œ í¡ìˆ˜ ì²´í¬ (ë§¤ í”„ë ˆì„)
+        TryAbsorbNearbyMagnetItems();
+
         ExecuteCurrentBehavior();
     }
 
-    // ==================== ÀÇ»ç°áÁ¤ ====================
+    // â˜… ìì„ í¡ìˆ˜ ê´€ë ¨ ë³€ìˆ˜
+    [Header("=== ìì„ í¡ìˆ˜ ===")]
+    [SerializeField] private float magnetAbsorbRadius = 3f;
+    private float magnetAbsorbTimer = 0f;
+    private const float MAGNET_ABSORB_INTERVAL = 0.2f;  // 0.2ì´ˆë§ˆë‹¤ ì²´í¬
+
+    /// <summary>
+    /// â˜… ê·¼ì²˜ì˜ enableMagnet ì•„ì´í…œ í¡ìˆ˜ í˜¸ì¶œ
+    /// Unitì´ íŒë‹¨ â†’ ì¸ë²¤ ê³„ì‚° â†’ PlayAbsorbAnimation í˜¸ì¶œ â†’ ì½œë°±ì—ì„œ ì¸ë²¤ ì¶”ê°€
+    /// </summary>
+    private void TryAbsorbNearbyMagnetItems()
+    {
+        // í¡ìˆ˜ ê°„ê²© ì²´í¬
+        magnetAbsorbTimer += Time.deltaTime;
+        if (magnetAbsorbTimer < MAGNET_ABSORB_INTERVAL) return;
+        magnetAbsorbTimer = 0f;
+
+        // â˜… pendingMagnetItems ì •ë¦¬ (Destroyë˜ê±°ë‚˜ í¡ìˆ˜ ì™„ë£Œëœ ê²ƒ ì œê±°)
+        pendingMagnetItems.RemoveAll(item => item == null || !item);
+
+        // ì¸ë²¤í† ë¦¬ê°€ ê½‰ ì°¼ìœ¼ë©´ ëŒ€ê¸° ë¦¬ìŠ¤íŠ¸ ë¹„ìš°ê³  ì¢…ë£Œ
+        if (unit.Inventory.IsFull)
+        {
+            if (pendingMagnetItems.Count > 0)
+            {
+                Debug.Log($"[UnitAI] {unit.UnitName}: ì¸ë²¤ ê½‰ ì°¸ â†’ ë‚¨ì€ ìì„ ì•„ì´í…œ {pendingMagnetItems.Count}ê°œ í¬ê¸°");
+                pendingMagnetItems.Clear();
+            }
+            return;
+        }
+
+        // â˜… pendingMagnetItemsì—ì„œ í¡ìˆ˜ ê°€ëŠ¥í•œ ì•„ì´í…œë§Œ í•„í„°ë§
+        var itemsToAbsorb = new List<DroppedItem>();
+
+        for (int i = pendingMagnetItems.Count - 1; i >= 0; i--)
+        {
+            var item = pendingMagnetItems[i];
+            if (item == null || !item)
+            {
+                pendingMagnetItems.RemoveAt(i);
+                continue;
+            }
+
+            // ì´ë¯¸ í¡ìˆ˜ ì¤‘ì´ë©´ ë¦¬ìŠ¤íŠ¸ì—ì„œ ì œê±°
+            if (item.IsBeingMagneted)
+            {
+                pendingMagnetItems.RemoveAt(i);
+                continue;
+            }
+
+            // ë°”ë‹¥ íŠ•ê¸°ê¸° ì¤‘ì´ë©´ ëŒ€ê¸°
+            if (item.IsAnimating) continue;
+
+            // ê±°ë¦¬ ì²´í¬
+            float dist = Vector3.Distance(transform.position, item.transform.position);
+            if (dist > magnetAbsorbRadius) continue;
+
+            // ì¸ë²¤ì— ë„£ì„ ìˆ˜ ìˆëŠ”ì§€
+            if (!unit.Inventory.CanAddAny(item.Resource))
+            {
+                // ì´ ìì›ì€ ë„£ì„ ìˆ˜ ì—†ìŒ â†’ í¬ê¸°
+                pendingMagnetItems.RemoveAt(i);
+                Debug.Log($"[UnitAI] {unit.UnitName}: {item.Resource?.ResourceName} ê³µê°„ ì—†ìŒ â†’ í¬ê¸°");
+                continue;
+            }
+
+            int availableSpace = unit.Inventory.GetAvailableSpaceFor(item.Resource);
+            if (availableSpace <= 0)
+            {
+                pendingMagnetItems.RemoveAt(i);
+                continue;
+            }
+
+            // í¡ìˆ˜ ê°€ëŠ¥! ë¦¬ìŠ¤íŠ¸ì— ì¶”ê°€
+            itemsToAbsorb.Add(item);
+            pendingMagnetItems.RemoveAt(i);
+        }
+
+        // â˜… í¡ìˆ˜ ì• ë‹ˆë©”ì´ì…˜ ì‹œì‘
+        foreach (var item in itemsToAbsorb)
+        {
+            // ì½œë°±ì—ì„œ ì¸ë²¤í† ë¦¬ ì¶”ê°€
+            item.PlayAbsorbAnimation(unit, (resource, amount) =>
+            {
+                // â˜… ì½œë°±: ì¸ë²¤ì— ì‹¤ì œë¡œ ì¶”ê°€
+                int added = unit.Inventory.AddItem(resource, amount);
+                Debug.Log($"[UnitAI] {unit.UnitName}: {resource?.ResourceName} x{added} ì¸ë²¤ ì¶”ê°€ ì™„ë£Œ");
+            });
+
+            Debug.Log($"[UnitAI] {unit.UnitName}: {item.Resource?.ResourceName} x{item.Amount} í¡ìˆ˜ ì‹œì‘");
+        }
+    }
+
+    // ==================== ï¿½Ç»ï¿½ï¿½ï¿½ï¿½ ====================
 
     private void MakeDecision()
     {
@@ -211,29 +307,42 @@ public class UnitAi : MonoBehaviour
         if (taskContext.HasTask)
             return;
 
-        // ¡Ú ÀúÀå°í ¹è´Ş ÁßÀÌ¸é °è¼Ó
+        // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½
         if (currentBehavior == AIBehaviorState.DeliveringToStorage)
             return;
 
-        // ¡Ú ÀúÀå°í ´ë±â ÁßÀÌ¸é °Ç¼³ ÀÛ¾÷¸¸ ¹Ş±â
+        // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ì¸ï¿½ ï¿½Ç¼ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ ï¿½Ş±ï¿½
         if (currentBehavior == AIBehaviorState.WaitingForStorage)
         {
             if (TryPullConstructionTask())
                 return;
-            // °Ç¼³ ÀÛ¾÷ ¾øÀ¸¸é °è¼Ó ´ë±â
+            // ï¿½Ç¼ï¿½ ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
             return;
         }
 
-        // ¡Ú Unity null Ã¼Å©·Î DestroyµÈ ¿ÀºêÁ§Æ® Á¤¸®
+        // â˜… Unity null ì²´í¬ + í¡ìˆ˜ ì¤‘ì¸ ì•„ì´í…œ ì œì™¸
         if (currentPersonalItem != null && !currentPersonalItem)
             currentPersonalItem = null;
-        personalItems.RemoveAll(item => item == null || !item);
+        if (currentPersonalItem != null && currentPersonalItem.IsBeingMagneted)
+            currentPersonalItem = null;
+        personalItems.RemoveAll(item => item == null || !item || item.IsBeingMagneted);
 
-        // °³ÀÎ ¾ÆÀÌÅÛ Áİ±â
+        // â˜… í¡ìˆ˜ ëŒ€ê¸° ì•„ì´í…œ ì •ë¦¬ (Destroyë˜ê±°ë‚˜ í¡ìˆ˜ ì™„ë£Œëœ ê²ƒ ì œê±°)
+        pendingMagnetItems.RemoveAll(item => item == null || !item);
+
+        // ê°œì¸ ì•„ì´í…œ ì¤ê¸° (í¡ìˆ˜ ì¤‘ ì•„ë‹Œ ê²ƒë§Œ)
         if (currentPersonalItem != null || personalItems.Count > 0)
         {
             if (currentBehavior != AIBehaviorState.PickingUpItem)
                 TryPickupPersonalItems();
+            return;
+        }
+
+        // â˜… í¡ìˆ˜ ëŒ€ê¸° ì•„ì´í…œì´ ìˆìœ¼ë©´ ìƒˆ ì‘ì—… ë°›ì§€ ì•Šê³  ëŒ€ê¸°
+        if (pendingMagnetItems.Count > 0)
+        {
+            // TryAbsorbNearbyMagnetItems()ì—ì„œ ì²˜ë¦¬ë¨ (Updateì—ì„œ í˜¸ì¶œ)
+            // ìƒˆ ì‘ì—… ë°›ì§€ ì•Šê³  í˜„ì¬ ìœ„ì¹˜ì—ì„œ ëŒ€ê¸°
             return;
         }
 
@@ -245,14 +354,14 @@ public class UnitAi : MonoBehaviour
 
         if (currentBehavior == AIBehaviorState.Idle || currentBehavior == AIBehaviorState.Wandering)
         {
-            // ¡Ú ÀÛ¾÷À» ¸ÕÀú Ã£°í
+            // ï¿½ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½
             if (TryPullTask())
                 return;
 
-            // ¡Ú ÀÛ¾÷ÀÌ ¾ø°í ÀÎº¥ÀÌ ²Ë Ã¡À¸¸é ÀúÀå°í·Î
+            // ï¿½ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Îºï¿½ï¿½ï¿½ ï¿½ï¿½ Ã¡ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
             if (ShouldDepositWhenIdle())
             {
-                Debug.Log($"[UnitAI] {unit.UnitName}: ÀÛ¾÷ ¾øÀ½ + ÀÎº¥Åä¸® °¡µæÂü ¡æ ÀúÀå°í·Î");
+                Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½ + ï¿½Îºï¿½ï¿½ä¸® ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
                 StartDeliveryToStorage();
                 return;
             }
@@ -264,7 +373,7 @@ public class UnitAi : MonoBehaviour
         }
     }
 
-    // ==================== ÀÛ¾÷ Pull ====================
+    // ==================== ï¿½Û¾ï¿½ Pull ====================
 
     private bool TryPullTask()
     {
@@ -272,6 +381,35 @@ public class UnitAi : MonoBehaviour
 
         var task = TaskManager.Instance.FindNearestTask(unit);
         if (task == null) return false;
+
+        // â˜… ì±„ì§‘ ì‘ì—…ì¸ ê²½ìš° ì¸ë²¤í† ë¦¬ ì²´í¬
+        if (task.Data.Type == TaskType.Harvest)
+        {
+            // ì¸ë²¤ì´ ì™„ì „íˆ ê½‰ ì°¼ìœ¼ë©´ ì±„ì§‘ ì‘ì—… ë°›ì§€ ì•ŠìŒ
+            if (unit.Inventory.IsFull)
+            {
+                Debug.Log($"[UnitAI] {unit.UnitName}: ì¸ë²¤ ê½‰ ì°¸ â†’ ì±„ì§‘ ì‘ì—… ìŠ¤í‚µ, ì €ì¥ê³ ë¡œ");
+                return false;
+            }
+
+            // í•´ë‹¹ ìì› ê³µê°„ì´ ì—†ìœ¼ë©´ ì±„ì§‘ ì‘ì—… ë°›ì§€ ì•ŠìŒ
+            var node = task.Owner as ResourceNode;
+            if (node?.Data?.Drops != null)
+            {
+                foreach (var drop in node.Data.Drops)
+                {
+                    if (drop.Resource != null)
+                    {
+                        if (!unit.Inventory.CanAddAny(drop.Resource))
+                        {
+                            Debug.Log($"[UnitAI] {unit.UnitName}: {drop.Resource.ResourceName} ê³µê°„ ì—†ìŒ â†’ ì±„ì§‘ ìŠ¤í‚µ");
+                            return false;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
 
         if (!TaskManager.Instance.TakeTask(task, unit))
             return false;
@@ -281,7 +419,7 @@ public class UnitAi : MonoBehaviour
     }
 
     /// <summary>
-    /// ¡Ú °Ç¼³ ÀÛ¾÷¸¸ °¡Á®¿À±â (ÀúÀå°í ´ë±â Áß¿¡µµ °Ç¼³Àº ÇÔ)
+    /// ï¿½ï¿½ ï¿½Ç¼ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ß¿ï¿½ï¿½ï¿½ ï¿½Ç¼ï¿½ï¿½ï¿½ ï¿½ï¿½)
     /// </summary>
     private bool TryPullConstructionTask()
     {
@@ -290,18 +428,18 @@ public class UnitAi : MonoBehaviour
         var task = TaskManager.Instance.FindNearestTask(unit);
         if (task == null) return false;
 
-        // °Ç¼³ ÀÛ¾÷¸¸ ¹ŞÀ½
+        // ï¿½Ç¼ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (task.Data.Type != TaskType.Construct)
             return false;
 
         if (!TaskManager.Instance.TakeTask(task, unit))
             return false;
 
-        // ÀúÀå°í ´ë±â »óÅÂ ÇØÁ¦
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         ClearDeliveryState();
 
         AssignTask(task);
-        Debug.Log($"[UnitAI] {unit.UnitName}: ÀúÀå°í ´ë±â Áß °Ç¼³ ÀÛ¾÷ ½ÃÀÛ");
+        Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ç¼ï¿½ ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½");
         return true;
     }
 
@@ -324,7 +462,7 @@ public class UnitAi : MonoBehaviour
             case TaskType.PickupItem:
                 AssignPickupTask(task);
                 break;
-            case TaskType.Workstation:  // ¡Ú Ãß°¡
+            case TaskType.Workstation:  // ï¿½ï¿½ ï¿½ß°ï¿½
                 AssignWorkstationTask(task);
                 break;
             default:
@@ -332,7 +470,7 @@ public class UnitAi : MonoBehaviour
                 break;
         }
 
-        Debug.Log($"[UnitAI] {unit.UnitName}: ÀÛ¾÷ ÇÒ´ç - {task.Data.Type}, Phase: {taskContext.Phase}");
+        Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½Û¾ï¿½ ï¿½Ò´ï¿½ - {task.Data.Type}, Phase: {taskContext.Phase}");
     }
 
     private void AssignConstructionTask(PostedTask task)
@@ -368,7 +506,7 @@ public class UnitAi : MonoBehaviour
         SetBehaviorAndPriority(AIBehaviorState.PickingUpItem, TaskPriorityLevel.ItemPickup);
     }
 
-    // ¡Ú ¿öÅ©½ºÅ×ÀÌ¼Ç ÀÛ¾÷ ÇÒ´ç
+    // ï¿½ï¿½ ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½Û¾ï¿½ ï¿½Ò´ï¿½
     private void AssignWorkstationTask(PostedTask task)
     {
         currentWorkstation = task.Owner as IWorkstation;
@@ -376,7 +514,7 @@ public class UnitAi : MonoBehaviour
 
         if (currentWorkstation == null)
         {
-            Debug.LogWarning("[UnitAI] ¿öÅ©½ºÅ×ÀÌ¼ÇÀ» Ã£À» ¼ö ¾ø½À´Ï´Ù.");
+            Debug.LogWarning("[UnitAI] ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½.");
             CompleteCurrentTask();
             return;
         }
@@ -389,7 +527,7 @@ public class UnitAi : MonoBehaviour
 
         SetBehaviorAndPriority(AIBehaviorState.WorkingAtStation, TaskPriorityLevel.Workstation);
 
-        Debug.Log($"[UnitAI] {unit.UnitName}: ¿öÅ©½ºÅ×ÀÌ¼Ç ÀÛ¾÷ ÇÒ´ç - {currentWorkstation.TaskType}");
+        Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½Û¾ï¿½ ï¿½Ò´ï¿½ - {currentWorkstation.TaskType}");
     }
 
     private void AssignGenericTask(PostedTask task)
@@ -401,7 +539,7 @@ public class UnitAi : MonoBehaviour
         SetBehaviorAndPriority(AIBehaviorState.Working, TaskPriorityLevel.FreeWill);
     }
 
-    // ==================== ÀÛ¾÷ À§Ä¡ °è»ê ====================
+    // ==================== ï¿½Û¾ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ ====================
 
     private Vector3 CalculateDistributedWorkPosition(Vector3 origin, Vector2Int size)
     {
@@ -436,10 +574,10 @@ public class UnitAi : MonoBehaviour
         bb.TargetPosition = newWorkPos;
         unit.MoveTo(newWorkPos);
 
-        Debug.Log($"[UnitAI] {unit.UnitName}: Àç¹èÄ¡ ¡æ {newWorkPos}");
+        Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½Ä¡ ï¿½ï¿½ {newWorkPos}");
     }
 
-    // ==================== Çàµ¿ ½ÇÇà ====================
+    // ==================== ï¿½àµ¿ ï¿½ï¿½ï¿½ï¿½ ====================
 
     private void ExecuteCurrentBehavior()
     {
@@ -448,7 +586,7 @@ public class UnitAi : MonoBehaviour
             case AIBehaviorState.Working:
                 UpdateWorking();
                 break;
-            case AIBehaviorState.WorkingAtStation:  // ¡Ú Ãß°¡
+            case AIBehaviorState.WorkingAtStation:  // ï¿½ï¿½ ï¿½ß°ï¿½
                 UpdateWorkingAtStation();
                 break;
             case AIBehaviorState.PickingUpItem:
@@ -460,7 +598,7 @@ public class UnitAi : MonoBehaviour
             case AIBehaviorState.DeliveringToStorage:
                 UpdateDeliveryToStorage();
                 break;
-            case AIBehaviorState.WaitingForStorage:  // ¡Ú ÀúÀå°í ´ë±â
+            case AIBehaviorState.WaitingForStorage:  // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
                 UpdateWaitingForStorage();
                 break;
             case AIBehaviorState.ExecutingCommand:
@@ -502,7 +640,7 @@ public class UnitAi : MonoBehaviour
         }
     }
 
-    // ¡Ú ¿öÅ©½ºÅ×ÀÌ¼Ç ÀÛ¾÷ ¾÷µ¥ÀÌÆ®
+    // ï¿½ï¿½ ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
     private void UpdateWorkingAtStation()
     {
         if (currentWorkstation == null)
@@ -528,16 +666,16 @@ public class UnitAi : MonoBehaviour
 
         if (dist <= workRadius)
         {
-            // ÀÛ¾÷ÀÚ ¹èÁ¤
+            // ï¿½Û¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
             if (!currentWorkstation.AssignWorker(unit))
             {
-                Debug.LogWarning($"[UnitAI] {unit.UnitName}: ¿öÅ©½ºÅ×ÀÌ¼Ç ÀÛ¾÷ÀÚ ¹èÁ¤ ½ÇÆĞ!");
+                Debug.LogWarning($"[UnitAI] {unit.UnitName}: ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½!");
                 CompleteCurrentTask();
                 return;
             }
 
             taskContext.SetWorking();
-            Debug.Log($"[UnitAI] {unit.UnitName}: ¿öÅ©½ºÅ×ÀÌ¼Ç µµÂø, ÀÛ¾÷ ½ÃÀÛ");
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ï¿½ï¿½, ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½");
             return;
         }
 
@@ -555,14 +693,14 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // ÀÛ¾÷ ½ÃÀÛ (ÇÑ ¹ø¸¸)
+        // ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
         if (!isWorkstationWorkStarted && currentWorkstation.CanStartWork)
         {
             currentWorkstation.StartWork();
             isWorkstationWorkStarted = true;
         }
 
-        // ÀÛ¾÷ ¼öÇà
+        // ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½
         taskContext.WorkTimer += Time.deltaTime;
         if (taskContext.WorkTimer >= 1f)
         {
@@ -571,21 +709,21 @@ public class UnitAi : MonoBehaviour
             currentWorkstation.DoWork(workAmount);
         }
 
-        // ÀÛ¾÷ ¿Ï·á Ã¼Å©
+        // ï¿½Û¾ï¿½ ï¿½Ï·ï¿½ Ã¼Å©
         var wsComponent = currentWorkstation as WorkstationComponent;
         if (wsComponent != null)
         {
             if (!wsComponent.IsWorking && isWorkstationWorkStarted)
             {
-                // ´ÙÀ½ ÀÛ¾÷ÀÌ ÀÖ´ÂÁö È®ÀÎ
+                // ï¿½ï¿½ï¿½ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ ï¿½Ö´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
                 if (currentWorkstation.CanStartWork)
                 {
                     isWorkstationWorkStarted = false;
-                    // ´Ù½Ã ÀÛ¾÷ ½ÃÀÛ
+                    // ï¿½Ù½ï¿½ ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½
                 }
                 else
                 {
-                    // ¸ğµç ÀÛ¾÷ ¿Ï·á
+                    // ï¿½ï¿½ï¿½ ï¿½Û¾ï¿½ ï¿½Ï·ï¿½
                     currentWorkstation.ReleaseWorker();
                     TaskManager.Instance?.CompleteTask(taskContext.Task);
                     CompleteCurrentTask();
@@ -601,7 +739,7 @@ public class UnitAi : MonoBehaviour
         if (dist <= workRadius)
         {
             taskContext.SetWorking();
-            Debug.Log($"[UnitAI] {unit.UnitName}: ÀÛ¾÷ À§Ä¡ µµÂø, ÀÛ¾÷ ½ÃÀÛ");
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½Û¾ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½, ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½");
             return;
         }
 
@@ -680,7 +818,7 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // ¡Ú Ã¤ÁıÇÒ ÀÚ¿ø È®ÀÎ
+        // ï¿½ï¿½ Ã¤ï¿½ï¿½ï¿½ï¿½ ï¿½Ú¿ï¿½ È®ï¿½ï¿½
         ResourceItemSO nodeResource = null;
         if (node.Data?.Drops != null)
         {
@@ -694,11 +832,11 @@ public class UnitAi : MonoBehaviour
             }
         }
 
-        // ¡Ú ÀúÀå°í·Î °¡¾ß ÇÏ´ÂÁö È®ÀÎ
-        // Á¶°Ç: ¸ğµç ½½·Ô »ç¿ë Áß AND ÇØ´ç ¾ÆÀÌÅÛ °ø°£ ¾øÀ½
+        // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ï´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
+        // ï¿½ï¿½ï¿½ï¿½: ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ AND ï¿½Ø´ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (nodeResource != null && ShouldDepositInventory(nodeResource))
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: ÀÎº¥ °¡µæÂü + {nodeResource.ResourceName} °ø°£ ¾øÀ½ ¡æ ÀúÀå°í·Î ÀÌµ¿");
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ + {nodeResource.ResourceName} ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½");
             previousTask = task;
             TaskManager.Instance?.LeaveTask(task, unit);
             taskContext.Clear();
@@ -717,16 +855,18 @@ public class UnitAi : MonoBehaviour
 
         if (node.IsDepleted)
         {
+            // ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ù¸ï¿½ ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½ï¿½)
+            previousTask = task;
             CompleteCurrentTask();
             TryPickupPersonalItems();
         }
     }
 
-    // ==================== ÀÛ¾÷ ¿Ï·á ====================
+    // ==================== ï¿½Û¾ï¿½ ï¿½Ï·ï¿½ ====================
 
     private void CompleteCurrentTask()
     {
-        // ¡Ú ¿öÅ©½ºÅ×ÀÌ¼Ç Á¤¸®
+        // ï¿½ï¿½ ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (currentWorkstation != null)
         {
             currentWorkstation.ReleaseWorker();
@@ -749,12 +889,12 @@ public class UnitAi : MonoBehaviour
 
         SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
 
-        Debug.Log($"[UnitAI] {unit.UnitName}: ÀÛ¾÷ ¿Ï·á, Idle »óÅÂ");
+        Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½Û¾ï¿½ ï¿½Ï·ï¿½, Idle ï¿½ï¿½ï¿½ï¿½");
     }
 
     private void InterruptCurrentTask()
     {
-        // ¡Ú ¿öÅ©½ºÅ×ÀÌ¼Ç Á¤¸®
+        // ï¿½ï¿½ ï¿½ï¿½Å©ï¿½ï¿½ï¿½ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (currentWorkstation != null)
         {
             currentWorkstation.CancelWork();
@@ -771,7 +911,7 @@ public class UnitAi : MonoBehaviour
         bb.CurrentTask = null;
     }
 
-    // ==================== ¾ÆÀÌÅÛ Áİ±â ====================
+    // ==================== ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½İ±ï¿½ ====================
 
     private void UpdatePickingUpItem()
     {
@@ -820,15 +960,30 @@ public class UnitAi : MonoBehaviour
         }
     }
 
-    // ==================== °³ÀÎ ¾ÆÀÌÅÛ ====================
+    // ==================== ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ====================
 
     public void AddPersonalItem(DroppedItem item)
     {
         if (item == null || personalItems.Contains(item)) return;
 
+        // â˜… enableMagnet ì•„ì´í…œì€ ë³„ë„ ë¦¬ìŠ¤íŠ¸ë¡œ ê´€ë¦¬
+        if (item.EnableMagnet)
+        {
+            if (!pendingMagnetItems.Contains(item))
+            {
+                pendingMagnetItems.Add(item);
+                item.SetOwner(unit);
+                Debug.Log($"[UnitAI] {unit.UnitName}: enableMagnet ì•„ì´í…œ â†’ í¡ìˆ˜ ëŒ€ê¸° ë¦¬ìŠ¤íŠ¸ ì¶”ê°€ ({pendingMagnetItems.Count}ê°œ)");
+            }
+            return;
+        }
+
         personalItems.Add(item);
         item.SetOwner(unit);
     }
+
+    // â˜… í¡ìˆ˜ ëŒ€ê¸° ì¤‘ì¸ ìì„ ì•„ì´í…œ ë¦¬ìŠ¤íŠ¸
+    private List<DroppedItem> pendingMagnetItems = new List<DroppedItem>();
 
     public void RemovePersonalItem(DroppedItem item)
     {
@@ -836,32 +991,37 @@ public class UnitAi : MonoBehaviour
 
         personalItems.Remove(item);
 
-        // ¡Ú Unity null Ã¼Å©·Î ºñ±³
+        // ï¿½ï¿½ Unity null Ã¼Å©ï¿½ï¿½ ï¿½ï¿½
         if (currentPersonalItem != null && currentPersonalItem == item)
             currentPersonalItem = null;
     }
 
     private void TryPickupPersonalItems()
     {
-        // ¡Ú Unity null Ã¼Å©·Î DestroyµÈ ¿ÀºêÁ§Æ® Á¤¸®
+        // â˜… Unity null ì²´í¬ + í¡ìˆ˜ ì¤‘ì¸ ì•„ì´í…œ ì œì™¸
         if (currentPersonalItem != null && !currentPersonalItem)
             currentPersonalItem = null;
-        personalItems.RemoveAll(item => item == null || !item || item.Owner != unit);
+
+        // â˜… í¡ìˆ˜ ì¤‘ì¸ ì•„ì´í…œ(IsBeingMagneted)ë„ ì œì™¸
+        personalItems.RemoveAll(item =>
+            item == null ||
+            !item ||
+            item.Owner != unit ||
+            item.IsBeingMagneted);  // í¡ìˆ˜ ì¤‘ì´ë©´ ì¤ê¸° ëŒ€ìƒì—ì„œ ì œì™¸
 
         if (personalItems.Count == 0)
         {
-            // ÁİÀ» ¾ÆÀÌÅÛ ¾øÀ½
             return;
         }
 
         currentPersonalItem = personalItems[0];
         personalItems.RemoveAt(0);
 
-        // ¡Ú ´Ù½Ã ÇÑ¹ø Ã¼Å© (È¤½Ã ¸ğ¸¦ »óÈ² ´ëºñ)
-        if (currentPersonalItem == null || !currentPersonalItem)
+        // â˜… ë‹¤ì‹œ ì²´í¬ (í¡ìˆ˜ ì¤‘ì´ë©´ ìŠ¤í‚µ)
+        if (currentPersonalItem == null || !currentPersonalItem || currentPersonalItem.IsBeingMagneted)
         {
             currentPersonalItem = null;
-            TryPickupPersonalItems();  // Àç±Í È£Ãâ·Î ´ÙÀ½ ¾ÆÀÌÅÛ ½Ãµµ
+            TryPickupPersonalItems();  // ì¬ê·€ í˜¸ì¶œë¡œ ë‹¤ìŒ ì•„ì´í…œ ì‹œë„
             return;
         }
 
@@ -875,15 +1035,11 @@ public class UnitAi : MonoBehaviour
 
     private void UpdatePickingUpPersonalItem()
     {
-        // ¡Ú Unity null Ã¼Å© (DestroyµÈ ¿ÀºêÁ§Æ® °¨Áö)
+        // â˜… Unity null ì²´í¬ (Destroyëœ ì˜¤ë¸Œì íŠ¸ ê°ì§€)
         if (currentPersonalItem == null || !currentPersonalItem)
         {
             currentPersonalItem = null;
-
-            // ´ÙÀ½ ¾ÆÀÌÅÛ ½Ãµµ
             TryPickupPersonalItems();
-
-            // ÁİÀ» ¾ÆÀÌÅÛÀÌ ¾øÀ¸¸é ´ÙÀ½ ÀÛ¾÷À¸·Î
             if (currentPersonalItem == null)
             {
                 ReturnToPreviousTaskOrIdle();
@@ -891,7 +1047,19 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // ¾Ö´Ï¸ŞÀÌ¼Ç ÁßÀÌ¸é ´ë±â
+        // â˜… í¡ìˆ˜ ì¤‘ì¸ ì•„ì´í…œì´ë©´ ìŠ¤í‚µ (ë‹¤ë¥¸ ê³³ì—ì„œ í¡ìˆ˜ ì²˜ë¦¬ ì¤‘)
+        if (currentPersonalItem.IsBeingMagneted)
+        {
+            currentPersonalItem = null;
+            TryPickupPersonalItems();
+            if (currentPersonalItem == null)
+            {
+                ReturnToPreviousTaskOrIdle();
+            }
+            return;
+        }
+
+        // ì• ë‹ˆë©”ì´ì…˜ ì¤‘ì´ë©´ ëŒ€ê¸°
         if (currentPersonalItem.IsAnimating)
         {
             float distToItem = Vector3.Distance(transform.position, currentPersonalItem.transform.position);
@@ -901,11 +1069,11 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // ¿¹¾à
+        // ï¿½ï¿½ï¿½ï¿½
         if (!currentPersonalItem.IsReserved)
             currentPersonalItem.Reserve(unit);
 
-        // °Å¸® Ã¼Å©
+        // ï¿½Å¸ï¿½ Ã¼Å©
         float dist = Vector3.Distance(transform.position, currentPersonalItem.transform.position);
         if (dist > pickupRadius)
         {
@@ -915,51 +1083,63 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // Áİ±â Å¸ÀÌ¸Ó
+        // ï¿½İ±ï¿½ Å¸ï¿½Ì¸ï¿½
         pickupTimer += Time.deltaTime;
         if (pickupTimer < itemPickupDuration)
             return;
 
-        // === Áİ±â ½ÇÇà ===
+        // === ï¿½İ±ï¿½ ï¿½ï¿½ï¿½ï¿½ ===
         var resource = currentPersonalItem.Resource;
+        int originalAmount = currentPersonalItem.Amount;  // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
-        // ÀÎº¥Åä¸® °ø°£ Ã¼Å©
+        // ï¿½Îºï¿½ï¿½ä¸® ï¿½ï¿½ï¿½ï¿½ Ã¼Å©
         if (ShouldDepositInventory(resource))
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: ÀÎº¥ °¡µæÂü + {resource?.ResourceName} °ø°£ ¾øÀ½ ¡æ ÀúÀå°í·Î ÀÌµ¿");
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ + {resource?.ResourceName} ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½");
             GiveUpRemainingPersonalItems();
             StartDeliveryToStorage();
             return;
         }
 
-        // ºÎºĞ Áİ±â
+        // ï¿½Îºï¿½ ï¿½İ±ï¿½
         int pickedAmount = currentPersonalItem.PickUpPartial(unit);
         pickupTimer = 0f;
 
         if (pickedAmount > 0)
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: {resource?.ResourceName} x{pickedAmount} ÁÖ¿ò");
+            Debug.Log($"[UnitAI] {unit.UnitName}: {resource?.ResourceName} x{pickedAmount}/{originalAmount} ï¿½Ö¿ï¿½");
         }
 
-        // ¾ÆÀÌÅÛÀÌ DestroyµÇ¾ú´ÂÁö È®ÀÎ (´ÙÀ½ ÇÁ·¹ÀÓ¿¡¼­ Ã³¸®µÊ)
-        // PickUpPartial¿¡¼­ Destroy È£Ãâ ½Ã ¹Ù·Î nullÀÌ µÊ
-        if (currentPersonalItem == null || !currentPersonalItem || currentPersonalItem.Amount <= 0)
+        // ï¿½ï¿½ ï¿½İ±ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ğ±ï¿½
+        // pickedAmount == originalAmount: ï¿½ï¿½ï¿½ï¿½ ï¿½Ö¿ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        // pickedAmount < originalAmount && pickedAmount > 0: ï¿½Îºï¿½ ï¿½İ±ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        // pickedAmount == 0: ï¿½ï¿½ ï¿½Ö¿ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+
+        if (pickedAmount >= originalAmount)
         {
+            // ï¿½ï¿½ï¿½ï¿½ ï¿½Ö¿ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Destroyï¿½ï¿½
             currentPersonalItem = null;
 
-            // ´ÙÀ½ ¾ÆÀÌÅÛ ½Ãµµ
+            // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ãµï¿½
             TryPickupPersonalItems();
 
-            // ÁİÀ» ¾ÆÀÌÅÛÀÌ ¾øÀ¸¸é ´ÙÀ½ ÀÛ¾÷À¸·Î
+            // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ï¿½ï¿½
             if (currentPersonalItem == null)
             {
                 ReturnToPreviousTaskOrIdle();
             }
         }
+        else if (pickedAmount > 0)
+        {
+            // ï¿½Îºï¿½ ï¿½İ±ï¿½ ï¿½ï¿½ï¿½ï¿½ = ï¿½Îºï¿½ ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½Îºï¿½ ï¿½İ±ï¿½ ({pickedAmount}/{originalAmount}) ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
+            GiveUpRemainingPersonalItems();
+            StartDeliveryToStorage();
+        }
         else
         {
-            // °°Àº ¾ÆÀÌÅÛÀÌ ³²¾ÆÀÖÀ½ = ÀÎº¥ ²Ë Âü
-            Debug.Log($"[UnitAI] {unit.UnitName}: ºÎºĞ Áİ±â ÈÄ ÀÎº¥ °¡µæ ¡æ ÀúÀå°í·Î");
+            // ï¿½ï¿½ ï¿½Ö¿ï¿½ = ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½î¼­ ï¿½ï¿½ ï¿½Ö¿ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
             GiveUpRemainingPersonalItems();
             StartDeliveryToStorage();
         }
@@ -967,7 +1147,7 @@ public class UnitAi : MonoBehaviour
 
     private void GiveUpRemainingPersonalItems()
     {
-        // ¡Ú Unity null Ã¼Å©
+        // ï¿½ï¿½ Unity null Ã¼Å©
         if (currentPersonalItem != null && currentPersonalItem)
         {
             currentPersonalItem.OwnerGiveUp();
@@ -976,63 +1156,63 @@ public class UnitAi : MonoBehaviour
 
         foreach (var item in personalItems)
         {
-            // ¡Ú Unity null Ã¼Å©
+            // ï¿½ï¿½ Unity null Ã¼Å©
             if (item != null && item)
                 item.OwnerGiveUp();
         }
         personalItems.Clear();
     }
 
-    // ==================== Ã¢°í ¹è´Ş ====================
+    // ==================== Ã¢ï¿½ï¿½ ï¿½ï¿½ï¿½ ====================
 
     private void StartDeliveryToStorage()
     {
-        // ÀúÀå°í Ã£±â (Ä³½Ã ¹«½ÃÇÏ°í Á÷Á¢ °Ë»ö)
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½ (Ä³ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï°ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ë»ï¿½)
         targetStorage = FindNearestStorageDirectly();
 
         if (targetStorage == null)
         {
-            // ¡Ú ÀúÀå°í°¡ ¾øÀ¸¸é ´ë±â »óÅÂ·Î ÀüÈ¯
-            Debug.Log($"[UnitAI] {unit.UnitName}: ÀúÀå°í ¾øÀ½ ¡æ ´ë±â »óÅÂ");
+            // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â·ï¿½ ï¿½ï¿½È¯
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½");
             SetBehaviorAndPriority(AIBehaviorState.WaitingForStorage, TaskPriorityLevel.FreeWill);
             return;
         }
 
-        // ÀúÀå°í Á¢±Ù À§Ä¡ °è»ê
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½
         storagePosition = targetStorage.GetNearestAccessPoint(transform.position);
 
-        // ÀúÀå°í·Î ÀÌµ¿ ½ÃÀÛ
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½ï¿½ï¿½ï¿½
         deliveryPhase = DeliveryPhase.MovingToStorage;
         depositTimer = 0f;
 
         unit.MoveTo(storagePosition);
         SetBehaviorAndPriority(AIBehaviorState.DeliveringToStorage, TaskPriorityLevel.ItemPickup);
 
-        Debug.Log($"[UnitAI] {unit.UnitName}: ÀúÀå°í·Î ÀÌµ¿ ½ÃÀÛ ¡æ {targetStorage.name}");
+        Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ {targetStorage.name}");
     }
 
     /// <summary>
-    /// ¡Ú ÀúÀå°í ´ë±â »óÅÂ ¾÷µ¥ÀÌÆ®
+    /// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
     /// </summary>
     private void UpdateWaitingForStorage()
     {
-        // ÁÖ±âÀûÀ¸·Î Ã¼Å© (1ÃÊ¸¶´Ù)
+        // ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã¼Å© (1ï¿½Ê¸ï¿½ï¿½ï¿½)
         if (Time.time - lastStorageCheckTime < 1f) return;
         lastStorageCheckTime = Time.time;
 
-        // ¡Ú °Ç¼³ ÀÛ¾÷ ¸ÕÀú Ã£±â
+        // ï¿½ï¿½ ï¿½Ç¼ï¿½ ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½
         if (TryPullConstructionTask())
         {
             return;
         }
 
-        // ÀúÀå°í ´Ù½Ã Ã£±â
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ù½ï¿½ Ã£ï¿½ï¿½
         targetStorage = FindNearestStorageDirectly();
 
         if (targetStorage != null)
         {
-            // ÀúÀå°í ¹ß°ß! ¡æ ÀúÀåÇÏ·¯ ÀÌµ¿
-            Debug.Log($"[UnitAI] {unit.UnitName}: ÀúÀå°í ¹ß°ß! ¡æ {targetStorage.name}");
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½! ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï·ï¿½ ï¿½Ìµï¿½
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ß°ï¿½! ï¿½ï¿½ {targetStorage.name}");
 
             storagePosition = targetStorage.GetNearestAccessPoint(transform.position);
             deliveryPhase = DeliveryPhase.MovingToStorage;
@@ -1054,7 +1234,7 @@ public class UnitAi : MonoBehaviour
                 UpdateDepositing();
                 break;
             default:
-                // Àß¸øµÈ »óÅÂ¸é Idle·Î
+                // ï¿½ß¸ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Â¸ï¿½ Idleï¿½ï¿½
                 ClearDeliveryState();
                 SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
                 break;
@@ -1065,28 +1245,28 @@ public class UnitAi : MonoBehaviour
     {
         if (targetStorage == null)
         {
-            // ÀúÀå°í°¡ »ç¶óÁ³À¸¸é Áï½Ã ÀúÀå
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
             unit.Inventory.DepositToStorage();
             ClearDeliveryState();
             ReturnToPreviousTaskOrIdle();
             return;
         }
 
-        // ¡Ú ÀúÀå°í ¹üÀ§ ³»¿¡ ÀÖ´ÂÁö È®ÀÎ (»ç°¢Çü)
+        // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ö´ï¿½ï¿½ï¿½ È®ï¿½ï¿½ (ï¿½ç°¢ï¿½ï¿½)
         bool isInRange = targetStorage.IsInAccessArea(transform.position);
 
-        // ÀúÀå°í¿¡ µµÂøÇß´ÂÁö È®ÀÎ
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ß´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
         if (isInRange || unit.HasArrivedAtDestination())
         {
-            // ÀúÀå ´Ü°è·Î ÀüÈ¯
+            // ï¿½ï¿½ï¿½ï¿½ ï¿½Ü°ï¿½ï¿½ ï¿½ï¿½È¯
             deliveryPhase = DeliveryPhase.Depositing;
             depositTimer = 0f;
             unit.StopMoving();
-            Debug.Log($"[UnitAI] {unit.UnitName}: ÀúÀå°í µµÂø, ÀúÀå ½ÃÀÛ ({depositDuration}ÃÊ)");
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½, ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ({depositDuration}ï¿½ï¿½)");
             return;
         }
 
-        // ¾ÆÁ÷ ÀÌµ¿ Áß - °æ·Î°¡ ¸·ÇûÀ¸¸é ´Ù½Ã ½Ãµµ
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½ ï¿½ï¿½ - ï¿½ï¿½Î°ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ù½ï¿½ ï¿½Ãµï¿½
         if (unit.HasArrivedAtDestination() && !isInRange)
         {
             unit.MoveTo(storagePosition);
@@ -1097,35 +1277,35 @@ public class UnitAi : MonoBehaviour
     {
         depositTimer += Time.deltaTime;
 
-        // ÀúÀå ÁøÇà Áß (¾Ö´Ï¸ŞÀÌ¼Ç µî Ãß°¡ °¡´É)
-        // TODO: ÀúÀå ¾Ö´Ï¸ŞÀÌ¼Ç Æ®¸®°Å
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ (ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ ï¿½ß°ï¿½ ï¿½ï¿½ï¿½ï¿½)
+        // TODO: ï¿½ï¿½ï¿½ï¿½ ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½ Æ®ï¿½ï¿½ï¿½ï¿½
 
         if (depositTimer >= depositDuration)
         {
-            // ÀúÀå ¿Ï·á
+            // ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½
             PerformDeposit();
             ClearDeliveryState();
 
-            Debug.Log($"[UnitAI] {unit.UnitName}: ÀúÀå ¿Ï·á!");
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ ï¿½Ï·ï¿½!");
 
-            // ÀÌÀü ÀÛ¾÷À¸·Î º¹±ÍÇÏ°Å³ª »õ ÀÛ¾÷ Ã£±â
+            // ï¿½ï¿½ï¿½ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï°Å³ï¿½ ï¿½ï¿½ ï¿½Û¾ï¿½ Ã£ï¿½ï¿½
             ReturnToPreviousTaskOrIdle();
         }
     }
 
     /// <summary>
-    /// ½ÇÁ¦ ÀúÀå ¼öÇà
+    /// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     /// </summary>
     private void PerformDeposit()
     {
         if (targetStorage != null && targetStorage.IsMainStorage)
         {
-            // ¸ŞÀÎ ÀúÀå°í¸é ResourceManager·Î ÀúÀå
+            // ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ResourceManagerï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
             unit.Inventory.DepositToStorage();
         }
         else if (targetStorage != null)
         {
-            // ÀÏ¹İ ÀúÀå°í¸é StorageComponent¿¡ ÀúÀå
+            // ï¿½Ï¹ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ StorageComponentï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
             foreach (var slot in unit.Inventory.Slots)
             {
                 if (!slot.IsEmpty)
@@ -1133,18 +1313,18 @@ public class UnitAi : MonoBehaviour
                     targetStorage.AddItem(slot.Resource, slot.Amount);
                 }
             }
-            // ÀÎº¥Åä¸® ºñ¿ì±â (µå·Ó ¾øÀÌ)
+            // ï¿½Îºï¿½ï¿½ä¸® ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
             unit.Inventory.Clear();
         }
         else
         {
-            // ÀúÀå°í°¡ ¾øÀ¸¸é ResourceManager·Î
+            // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ResourceManagerï¿½ï¿½
             unit.Inventory.DepositToStorage();
         }
     }
 
     /// <summary>
-    /// ÀúÀå¼Ò ¹è´Ş »óÅÂ ÃÊ±âÈ­
+    /// ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê±ï¿½È­
     /// </summary>
     private void ClearDeliveryState()
     {
@@ -1154,11 +1334,20 @@ public class UnitAi : MonoBehaviour
     }
 
     /// <summary>
-    /// ÀÌÀü ÀÛ¾÷À¸·Î º¹±ÍÇÏ°Å³ª »õ ÀÛ¾÷ Ã£±â ¶Ç´Â Idle
+    /// ï¿½ï¿½ï¿½ï¿½ ï¿½Û¾ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï°Å³ï¿½ ï¿½ï¿½ ï¿½Û¾ï¿½ Ã£ï¿½ï¿½ ï¿½Ç´ï¿½ Idle
     /// </summary>
     private void ReturnToPreviousTaskOrIdle()
     {
-        // 1. ÀÌÀü ÀÛ¾÷À¸·Î º¹±Í ½Ãµµ
+        // â˜… í¡ìˆ˜ ëŒ€ê¸° ì•„ì´í…œì´ ìˆìœ¼ë©´ ìƒˆ ì‘ì—… ë°›ì§€ ì•ŠìŒ
+        pendingMagnetItems.RemoveAll(item => item == null || !item);
+        if (pendingMagnetItems.Count > 0)
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: í¡ìˆ˜ ëŒ€ê¸° ì¤‘ ({pendingMagnetItems.Count}ê°œ) â†’ ìƒˆ ì‘ì—… ì•ˆ ë°›ìŒ");
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+            return;
+        }
+
+        // 1. ì´ì „ ì‘ì—…ìœ¼ë¡œ ë³µê·€ ì‹œë„
         if (previousTask != null && TaskManager.Instance != null)
         {
             var task = previousTask;
@@ -1169,28 +1358,28 @@ public class UnitAi : MonoBehaviour
                 TaskManager.Instance.TakeTask(task, unit))
             {
                 AssignTask(task);
-                Debug.Log($"[UnitAI] {unit.UnitName}: ÀÌÀü ÀÛ¾÷À¸·Î º¹±Í");
+                Debug.Log($"[UnitAI] {unit.UnitName}: ì´ì „ ì‘ì—…ìœ¼ë¡œ ë³µê·€");
                 return;
             }
         }
 
-        // 2. »õ ÀÛ¾÷ Ã£±â
+        // 2. ìƒˆ ì‘ì—… ì°¾ê¸°
         if (TryPullTask())
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: »õ ÀÛ¾÷ ½ÃÀÛ");
+            Debug.Log($"[UnitAI] {unit.UnitName}: ìƒˆ ì‘ì—… ì‹œì‘");
             return;
         }
 
-        // 3. ÀÛ¾÷ ¾øÀ¸¸é Idle
+        // 3. ì‘ì—… ì—†ìœ¼ë©´ Idle
         SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
     }
 
     /// <summary>
-    /// °¡Àå °¡±î¿î ÀúÀå°í Ã£±â
+    /// ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½
     /// </summary>
     private StorageComponent FindNearestStorage()
     {
-        // BuildingManager¸¦ ÅëÇØ Ã£±â
+        // BuildingManagerï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½
         if (BuildingManager.Instance != null)
         {
             var storage = BuildingManager.Instance.GetNearestStorage(transform.position, mustHaveSpace: false);
@@ -1200,14 +1389,14 @@ public class UnitAi : MonoBehaviour
             }
         }
 
-        // BuildingManager°¡ ¾øÀ¸¸é Á÷Á¢ Ã£±â
+        // BuildingManagerï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½
         var storages = FindObjectsOfType<StorageComponent>();
         StorageComponent nearest = null;
         float nearestDist = storageSearchRadius;
 
         foreach (var storage in storages)
         {
-            // ¿Ï¼ºµÈ °Ç¹°¸¸
+            // ï¿½Ï¼ï¿½ï¿½ï¿½ ï¿½Ç¹ï¿½ï¿½ï¿½
             var building = storage.GetComponent<Building>();
             if (building != null && building.CurrentState != BuildingState.Completed)
                 continue;
@@ -1224,7 +1413,7 @@ public class UnitAi : MonoBehaviour
     }
 
     /// <summary>
-    /// ¡Ú ÀúÀå°í Á÷Á¢ °Ë»ö (Ä³½Ã »ç¿ë ¾ÈÇÔ)
+    /// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ë»ï¿½ (Ä³ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
     /// </summary>
     private StorageComponent FindNearestStorageDirectly()
     {
@@ -1234,7 +1423,7 @@ public class UnitAi : MonoBehaviour
 
         foreach (var storage in storages)
         {
-            // ¿Ï¼ºµÈ °Ç¹°¸¸ (Building ÄÄÆ÷³ÍÆ®°¡ ¾øÀ¸¸é ¿Ï¼ºµÈ °ÍÀ¸·Î °£ÁÖ)
+            // ï¿½Ï¼ï¿½ï¿½ï¿½ ï¿½Ç¹ï¿½ï¿½ï¿½ (Building ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ï¼ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
             var building = storage.GetComponent<Building>();
             if (building != null && building.CurrentState != BuildingState.Completed)
                 continue;
@@ -1247,18 +1436,18 @@ public class UnitAi : MonoBehaviour
             }
         }
 
-        // Ä³½Ã °»½Å
+        // Ä³ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         hasStorageBuilding = nearest != null;
 
         return nearest;
     }
 
     /// <summary>
-    /// ¡Ú ÀúÀå°í°¡ Á¸ÀçÇÏ´ÂÁö È®ÀÎ (Ä³½Ã »ç¿ë)
+    /// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½Ï´ï¿½ï¿½ï¿½ È®ï¿½ï¿½ (Ä³ï¿½ï¿½ ï¿½ï¿½ï¿½)
     /// </summary>
     private bool HasAnyStorage()
     {
-        // Ä³½ÃµÈ °á°ú »ç¿ë (5ÃÊ¸¶´Ù °»½Å)
+        // Ä³ï¿½Ãµï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ (5ï¿½Ê¸ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
         if (Time.time - lastStorageCheckTime < STORAGE_CHECK_INTERVAL)
         {
             return hasStorageBuilding;
@@ -1266,7 +1455,7 @@ public class UnitAi : MonoBehaviour
 
         lastStorageCheckTime = Time.time;
 
-        // BuildingManager¸¦ ÅëÇØ È®ÀÎ
+        // BuildingManagerï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
         if (BuildingManager.Instance != null)
         {
             var storage = BuildingManager.Instance.GetNearestStorage(transform.position, mustHaveSpace: false);
@@ -1274,7 +1463,7 @@ public class UnitAi : MonoBehaviour
             return hasStorageBuilding;
         }
 
-        // BuildingManager°¡ ¾øÀ¸¸é Á÷Á¢ È®ÀÎ
+        // BuildingManagerï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
         var storages = FindObjectsOfType<StorageComponent>();
         foreach (var storage in storages)
         {
@@ -1291,55 +1480,67 @@ public class UnitAi : MonoBehaviour
     }
 
     /// <summary>
-    /// ¡Ú ÀÎº¥Åä¸®¸¦ ºñ¿ö¾ß ÇÏ´ÂÁö È®ÀÎ
-    /// Á¶°Ç: ¸ğµç ½½·Ô »ç¿ë Áß AND ÇØ´ç ¾ÆÀÌÅÛ °ø°£ ¾øÀ½
+    /// ï¿½ï¿½ ï¿½Îºï¿½ï¿½ä¸®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ï´ï¿½ï¿½ï¿½ È®ï¿½ï¿½
+    /// ï¿½ï¿½ï¿½ï¿½: ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ AND ï¿½Ø´ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
     /// </summary>
     private bool ShouldDepositInventory(ResourceItemSO resourceToAdd = null)
     {
-        // ÀÎº¥Åä¸®°¡ ºñ¾îÀÖÀ¸¸é ÀúÀåÇÒ ÇÊ¿ä ¾øÀ½
+        // ï¿½Îºï¿½ï¿½ä¸®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (unit.Inventory.IsEmpty) return false;
 
-        // ¸ğµç ½½·ÔÀÌ »ç¿ë ÁßÀÎÁö È®ÀÎ
+        // ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ È®ï¿½ï¿½
         bool allSlotsUsed = unit.Inventory.UsedSlots >= unit.Inventory.MaxSlots;
 
         if (!allSlotsUsed)
         {
-            // ºó ½½·ÔÀÌ ÀÖÀ¸¸é ÀúÀå ÇÊ¿ä ¾øÀ½
+            // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½ ï¿½ï¿½ï¿½ï¿½
             return false;
         }
 
-        // ¸ğµç ½½·ÔÀÌ »ç¿ë ÁßÀÏ ¶§
+        // ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½
         if (resourceToAdd != null)
         {
-            // Ãß°¡ÇÏ·Á´Â ¾ÆÀÌÅÛÀÌ µé¾î°¥ °ø°£ÀÌ ¾øÀ¸¸é ÀúÀå ÇÊ¿ä
+            // ï¿½ß°ï¿½ï¿½Ï·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½î°¥ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½Ê¿ï¿½
             return !unit.Inventory.CanAddAny(resourceToAdd);
         }
 
-        // Ãß°¡ÇÏ·Á´Â ¾ÆÀÌÅÛÀÌ ¾øÀ¸¸é (ÀÏ¹İ IsFull Ã¼Å©)
+        // ï¿½ß°ï¿½ï¿½Ï·ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½Ï¹ï¿½ IsFull Ã¼Å©)
         return unit.Inventory.IsFull;
     }
 
     /// <summary>
-    /// ¡Ú ÀÛ¾÷ÀÌ ¾øÀ» ¶§ ÀÎº¥Åä¸® Á¤¸®°¡ ÇÊ¿äÇÑÁö È®ÀÎ
-    /// Á¶°Ç: ÀÛ¾÷ÀÌ ¾ø°í + ÀÎº¥ÀÌ ²Ë Ã¡À» ¶§¸¸
+    /// â˜… ì‘ì—…ì´ ì—†ì„ ë•Œ ì¸ë²¤í† ë¦¬ ì •ë¦¬ê°€ í•„ìš”í•œì§€ í™•ì¸
     /// </summary>
     private bool ShouldDepositWhenIdle()
     {
-        // ÀÎº¥Åä¸®°¡ ºñ¾îÀÖÀ¸¸é ÀúÀåÇÒ ÇÊ¿ä ¾øÀ½
+        // ì¸ë²¤í† ë¦¬ê°€ ë¹„ì–´ìˆìœ¼ë©´ ì €ì¥í•  í•„ìš” ì—†ìŒ
         if (unit.Inventory.IsEmpty) return false;
 
-        // ÀÛ¾÷ÀÌ ÀÖÀ¸¸é ÀúÀåÇÏÁö ¾ÊÀ½
+        // ì¸ë²¤ì´ ê½‰ ì°¨ì§€ ì•Šì•˜ìœ¼ë©´ ì €ì¥ í•„ìš” ì—†ìŒ
+        if (!unit.Inventory.IsFull) return false;
+
+        // ì‘ì—…ì´ ìˆëŠ”ì§€ í™•ì¸
         if (TaskManager.Instance != null)
         {
             var availableTask = TaskManager.Instance.FindNearestTask(unit);
-            if (availableTask != null) return false;
+            if (availableTask != null)
+            {
+                // â˜… ì±„ì§‘ ì‘ì—…ì´ë©´ ì €ì¥ê³ ë¡œ (ì¸ë²¤ ê½‰ ì°¨ì„œ ì±„ì§‘ ëª» í•¨)
+                if (availableTask.Data.Type == TaskType.Harvest)
+                {
+                    return true;
+                }
+                // ê±´ì„¤ ë“± ë‹¤ë¥¸ ì‘ì—…ì€ í•  ìˆ˜ ìˆìœ¼ë¯€ë¡œ ì €ì¥ ì•ˆ í•¨
+                return false;
+            }
         }
 
-        // ¡Ú ÀÎº¥ÀÌ ²Ë Ã¡À» ¶§¸¸ ÀúÀå (¸ğµç ½½·ÔÀÌ °¡µæ Âù »óÅÂ)
-        return unit.Inventory.IsFull;
+        // ì‘ì—…ì´ ì—†ê³  ì¸ë²¤ì´ ê½‰ ì°¼ìœ¼ë©´ ì €ì¥
+        return true;
     }
 
-    // ==================== À½½Ä Ã£±â ====================
+
+    // ==================== ï¿½ï¿½ï¿½ï¿½ Ã£ï¿½ï¿½ ====================
 
     private bool TrySeekFood()
     {
@@ -1396,7 +1597,7 @@ public class UnitAi : MonoBehaviour
         return nearest;
     }
 
-    // ¡Ú ¿ÜºÎ¿¡¼­ À½½Ä À§Ä¡ ¼³Á¤
+    // ï¿½ï¿½ ï¿½ÜºÎ¿ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
     public void SetFoodTarget(Vector3 foodPosition)
     {
         if (bb.Hunger > hungerSeekThreshold) return;
@@ -1406,7 +1607,7 @@ public class UnitAi : MonoBehaviour
         SetBehaviorAndPriority(AIBehaviorState.SeekingFood, TaskPriorityLevel.Survival);
     }
 
-    // ==================== ÇÃ·¹ÀÌ¾î ¸í·É ====================
+    // ==================== ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½ï¿½ï¿½ ====================
 
     public void GiveCommand(UnitCommand command)
     {
@@ -1457,7 +1658,7 @@ public class UnitAi : MonoBehaviour
         bb.PlayerCommand = null;
     }
 
-    // ==================== ÀÚÀ¯ Çàµ¿ ====================
+    // ==================== ï¿½ï¿½ï¿½ï¿½ ï¿½àµ¿ ====================
 
     private void PerformFreeWill()
     {
@@ -1483,7 +1684,7 @@ public class UnitAi : MonoBehaviour
             SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
     }
 
-    // ==================== À¯Æ¿¸®Æ¼ ====================
+    // ==================== ï¿½ï¿½Æ¿ï¿½ï¿½Æ¼ ====================
 
     private void SetBehaviorAndPriority(AIBehaviorState behavior, TaskPriorityLevel priority)
     {
@@ -1503,10 +1704,10 @@ public class UnitAi : MonoBehaviour
 
     private void OnHungerCritical()
     {
-        Debug.Log($"[UnitAI] {unit.UnitName}: ¹è°íÇÄ!");
+        Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ï¿½!");
     }
 
-    // ==================== µğ¹ö±× ====================
+    // ==================== ï¿½ï¿½ï¿½ï¿½ï¿½ ====================
 
     private void OnDrawGizmos()
     {
@@ -1537,7 +1738,7 @@ public class UnitAi : MonoBehaviour
         Gizmos.DrawLine(transform.position, taskContext.WorkPosition);
     }
 
-    // ==================== È£È¯¼º ====================
+    // ==================== È£È¯ï¿½ï¿½ ====================
 
     public void AddPlayerCommand(UnitTask task) { }
     public void AddPlayerCommandImmediate(UnitTask task) { }

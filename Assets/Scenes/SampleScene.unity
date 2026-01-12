@@ -4552,7 +4552,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 54909258eca6737499eafa279d5ef136, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  apiConfig: {fileID: 11400000, guid: d0c0c00bc26b66247aeb296230b0c8b6, type: 2}
+  apiConfig: {fileID: 11400000, guid: 96967d7d50b5a2447bd2cd24ba36dd18, type: 2}
   localFilter: {fileID: 1174879780}
   targetLanguage: "\uC601\uC5B4"
 --- !u!114 &1174879778

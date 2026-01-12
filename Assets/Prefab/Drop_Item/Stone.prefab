@@ -207,3 +207,4 @@ MonoBehaviour:
   isPublic: 0
   isAnimating: 0
   isBeingMagneted: 0
+  droppedItemPrefab: {fileID: 0}

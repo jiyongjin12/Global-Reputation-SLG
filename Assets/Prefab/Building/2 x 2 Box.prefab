@@ -154,9 +154,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxCapacity: -1
-  isMainStorage: 0
-  accessAreaCenter: {x: 1, y: 0, z: 1}
-  accessAreaSize: {x: 2, y: 2, z: 2}
+  isMainStorage: 1
+  accessAreaCenter: {x: 1, y: 0.5, z: 1}
+  accessAreaSize: {x: 2, y: 1, z: 2}
   accessDistance: 2
-  dropPointOffset: {x: 0.86, y: 0.5, z: 1}
+  dropPointOffset: {x: 1, y: 0.5, z: 1}
   storedItems: []

@@ -104,6 +104,8 @@ public class DroppedItem : MonoBehaviour
     public bool IsReserved => isReserved;
     public Unit ReservedBy => reservedBy;
     public bool IsAnimating => isAnimating;
+    public bool IsBeingMagneted => isBeingMagneted;  // ★ 추가
+    public bool IsBeingCarried => isBeingCarried;    // ★ 추가
 
     // 소유권 Properties
     public Unit Owner => owner;
@@ -131,12 +133,7 @@ public class DroppedItem : MonoBehaviour
                 BecomePublic();
             }
         }
-
-        // 자석 활성화 + 애니메이션 끝난 상태에서만 탐지
-        if (enableMagnet && !isAnimating && !isBeingMagneted && !isBeingCarried)
-        {
-            TryFindMagnetTarget();
-        }
+        // ★ 자동 흡수 로직 없음 - Unit이 PlayAbsorbAnimation을 호출해야만 흡수됨
     }
 
     public void Initialize(ResourceItemSO resourceItem, int itemAmount)
@@ -324,11 +321,9 @@ public class DroppedItem : MonoBehaviour
 
         isAnimating = false;
 
-        // ★ 바닥 튕기기 완료 → 이제 흡수 가능
-        if (enableMagnet)
-        {
-            isReadyForMagnet = true;
-        }
+        // ★ 바닥 튕기기 완료 - 자동 흡수 비활성화
+        // Unit이 RequestMagnetAbsorb()를 호출할 때만 흡수됨
+        // isReadyForMagnet는 Unit 호출 시에만 true가 됨
 
         OnAnimationComplete?.Invoke(this);
     }
@@ -384,180 +379,40 @@ public class DroppedItem : MonoBehaviour
         );
     }
 
-    // ==================== 자석 흡수 (특성용) ====================
+    // ==================== 자석 흡수 (애니메이션만 담당) ====================
 
-    // ★ 흡수 준비 완료 상태 (바닥 튕기기 완료 후)
-    [SerializeField] private bool isReadyForMagnet = false;
-
-    private void TryFindMagnetTarget()
-    {
-        if (!enableMagnet) return;
-
-        // ★ 바닥 튕기기 완료 후에만 흡수 가능
-        if (!isReadyForMagnet) return;
-
-        var colliders = Physics.OverlapSphere(transform.position, magnetRadius);
-
-        Unit nearestUnit = null;
-        float nearestDist = magnetRadius;
-
-        foreach (var col in colliders)
-        {
-            var unit = col.GetComponent<Unit>();
-            if (unit == null || !unit.IsAlive) continue;
-
-            // ★ 해당 아이템을 받을 수 있는지 확인
-            if (!unit.Inventory.CanAddAny(resource)) continue;
-
-            // 개인 소유면 Owner만 자석 대상
-            if (!isPublic && owner != unit) continue;
-
-            float dist = Vector3.Distance(transform.position, unit.transform.position);
-            if (dist < nearestDist)
-            {
-                nearestDist = dist;
-                nearestUnit = unit;
-            }
-        }
-
-        if (nearestUnit != null)
-        {
-            // ★ 필요한 만큼만 흡수
-            int availableSpace = nearestUnit.Inventory.GetAvailableSpaceFor(resource);
-            int absorbAmount = Mathf.Min(amount, availableSpace);
-
-            if (absorbAmount <= 0) return;
-
-            StartPartialMagnet(nearestUnit, absorbAmount);
-        }
-    }
+    // 흡수 상태
+    private bool isReadyForMagnet = false;
 
     /// <summary>
-    /// ★ 부분 흡수 시작 - 필요한 양만 분리해서 흡수
+    /// ★ 자석 기능 활성화 여부 (읽기 전용)
     /// </summary>
-    private void StartPartialMagnet(Unit target, int absorbAmount)
-    {
-        int remaining = amount - absorbAmount;
-
-        if (remaining > 0)
-        {
-            // ★ 남은 양으로 업데이트 (원본은 바닥에 남음)
-            amount = remaining;
-
-            // ★ 흡수할 양만큼 새 아이템 생성해서 흡수 애니메이션
-            SpawnAndAbsorb(target, absorbAmount);
-        }
-        else
-        {
-            // 전체 흡수 - 기존 방식
-            isBeingMagneted = true;
-            isReserved = true;
-            reservedBy = target;
-            magnetCoroutine = StartCoroutine(MagnetCoroutineSimple(target, amount));
-        }
-    }
+    public bool EnableMagnet => enableMagnet;
 
     /// <summary>
-    /// ★ 흡수할 양만큼 새 아이템 생성해서 흡수 애니메이션
+    /// ★ Unit이 흡수 애니메이션을 호출
+    /// DroppedItem은 애니메이션만 실행, 인벤 추가는 Unit이 콜백에서 처리
     /// </summary>
-    private void SpawnAndAbsorb(Unit target, int absorbAmount)
+    /// <param name="target">흡수 대상 Unit</param>
+    /// <param name="onComplete">완료 콜백 (Resource, Amount 전달)</param>
+    public bool PlayAbsorbAnimation(Unit target, System.Action<ResourceItemSO, int> onComplete)
     {
-        // 같은 위치에 새 DroppedItem 생성
-        GameObject prefab = droppedItemPrefab != null ? droppedItemPrefab : gameObject;
-        GameObject newItemObj = Instantiate(prefab, transform.position, Quaternion.identity);
-        DroppedItem newItem = newItemObj.GetComponent<DroppedItem>();
+        if (isBeingMagneted) return false;
+        if (isAnimating) return false;
+        if (target == null) return false;
 
-        if (newItem != null)
-        {
-            newItem.Initialize(resource, absorbAmount);
-            newItem.enableMagnet = true;
-            newItem.isAnimating = false;
-            newItem.isReadyForMagnet = false;  // 즉시 흡수 시작
-            newItem.isPublic = isPublic;
-            newItem.owner = owner;
-            newItemObj.transform.localScale = originalScale;
-
-            // 새 아이템이 흡수 애니메이션 수행
-            newItem.isBeingMagneted = true;
-            newItem.isReserved = true;
-            newItem.reservedBy = target;
-            newItem.magnetCoroutine = newItem.StartCoroutine(newItem.MagnetCoroutineSimple(target, absorbAmount));
-
-            Debug.Log($"[DroppedItem] 부분 흡수: {resource?.ResourceName} x{absorbAmount} → {target.UnitName}, 남음: {amount}");
-        }
-    }
-
-    /// <summary>
-    /// ★ 간단한 흡수 코루틴 (부분 흡수용)
-    /// </summary>
-    private IEnumerator MagnetCoroutineSimple(Unit target, int absorbAmount)
-    {
-        Vector3 startPos = transform.position;
-        Vector3 targetPos = target.transform.position + Vector3.up * 0.5f;
-
-        Vector3 awayDirection = (startPos - targetPos).normalized;
-        awayDirection.y = 0;
-
-        // 윈드업 (뒤로 빠지면서 위로)
-        Vector3 windupTarget = startPos + awayDirection * windupBackDistance + Vector3.up * windupUpDistance;
-
-        float timer = 0f;
-        while (timer < windupDuration)
-        {
-            if (target == null || !target.IsAlive) { CancelMagnet(); yield break; }
-
-            timer += Time.deltaTime;
-            float t = timer / windupDuration;
-            transform.position = Vector3.Lerp(startPos, windupTarget, EaseOutQuad(t));
-            transform.localScale = originalScale * (1f + 0.15f * Mathf.Sin(t * Mathf.PI));
-
-            yield return null;
-        }
-
-        // 빨려들어오기 (베지어 곡선)
-        Vector3 pullStartPos = transform.position;
-        timer = 0f;
-
-        while (timer < magnetPullDuration)
-        {
-            if (target == null || !target.IsAlive) { CancelMagnet(); yield break; }
-
-            timer += Time.deltaTime;
-            float t = timer / magnetPullDuration;
-
-            targetPos = target.transform.position + Vector3.up * 0.5f;
-            float easedT = EaseInQuad(t);
-
-            Vector3 midPoint = (pullStartPos + targetPos) / 2f + Vector3.up * 0.4f;
-            transform.position = QuadraticBezier(pullStartPos, midPoint, targetPos, easedT);
-            transform.localScale = originalScale * Mathf.Max(0.1f, 1f - 0.7f * easedT);
-
-            yield return null;
-        }
-
-        // ★ 인벤토리에 추가 (이미 정해진 양만)
-        if (target != null && target.IsAlive)
-        {
-            target.Inventory.AddItem(resource, absorbAmount);
-            Debug.Log($"[DroppedItem] 흡수 완료: {resource?.ResourceName} x{absorbAmount}");
-            OnPickedUp?.Invoke(this);
-            Destroy(gameObject);
-        }
-        else
-        {
-            CancelMagnet();
-        }
-    }
-
-    private void StartMagnetWithWindup(Unit target)
-    {
         isBeingMagneted = true;
         isReserved = true;
         reservedBy = target;
-        magnetCoroutine = StartCoroutine(MagnetCoroutine(target));
+
+        StartCoroutine(AbsorbAnimationCoroutine(target, onComplete));
+        return true;
     }
 
-    private IEnumerator MagnetCoroutine(Unit target)
+    /// <summary>
+    /// ★ 흡수 애니메이션 코루틴 (애니메이션만, 인벤 추가 안 함)
+    /// </summary>
+    private IEnumerator AbsorbAnimationCoroutine(Unit target, System.Action<ResourceItemSO, int> onComplete)
     {
         Vector3 startPos = transform.position;
         Vector3 targetPos = target.transform.position + Vector3.up * 0.5f;
@@ -571,65 +426,50 @@ public class DroppedItem : MonoBehaviour
         float timer = 0f;
         while (timer < windupDuration)
         {
-            if (target == null || !target.IsAlive) { CancelMagnet(); yield break; }
-
-            timer += Time.deltaTime;
-            float t = timer / windupDuration;
-            transform.position = Vector3.Lerp(startPos, windupTarget, EaseOutQuad(t));
-            transform.localScale = originalScale * (1f + 0.15f * Mathf.Sin(t * Mathf.PI));
-
-            yield return null;
-        }
-
-        // 빨려들어오기 (베지어 곡선)
-        Vector3 pullStartPos = transform.position;
-        timer = 0f;
-
-        while (timer < magnetPullDuration)
-        {
-            if (target == null || !target.IsAlive) { CancelMagnet(); yield break; }
-
-            // ★ 공간 체크 - 중간에 공간이 없어지면 취소
-            if (!target.Inventory.CanAddAny(resource)) { CancelMagnet(); yield break; }
-
-            timer += Time.deltaTime;
-            float t = timer / magnetPullDuration;
-
-            targetPos = target.transform.position + Vector3.up * 0.5f;
-            float easedT = EaseInQuad(t);
-
-            Vector3 midPoint = (pullStartPos + targetPos) / 2f + Vector3.up * 0.4f;
-            transform.position = QuadraticBezier(pullStartPos, midPoint, targetPos, easedT);
-            transform.localScale = originalScale * Mathf.Max(0.1f, 1f - 0.7f * easedT);
-
-            yield return null;
-        }
-
-        // ★ 부분 흡수 처리
-        if (target != null && target.IsAlive)
-        {
-            int availableSpace = target.Inventory.GetAvailableSpaceFor(resource);
-
-            if (availableSpace <= 0)
+            if (target == null || !target.IsAlive)
             {
-                // 공간이 없으면 취소
                 CancelMagnet();
                 yield break;
             }
 
-            int amountToAbsorb = Mathf.Min(amount, availableSpace);
-            int remaining = amount - amountToAbsorb;
+            timer += Time.deltaTime;
+            float t = timer / windupDuration;
+            transform.position = Vector3.Lerp(startPos, windupTarget, EaseOutQuad(t));
+            transform.localScale = originalScale * (1f + 0.15f * Mathf.Sin(t * Mathf.PI));
 
-            // 흡수할 수 있는 만큼만 인벤토리에 추가
-            target.Inventory.AddItem(resource, amountToAbsorb);
-            Debug.Log($"[DroppedItem] {resource?.ResourceName} x{amountToAbsorb} 흡수 (남은 공간: {availableSpace}, 남은 아이템: {remaining})");
+            yield return null;
+        }
 
-            // ★ 남은 아이템이 있으면 새로운 DroppedItem 생성
-            if (remaining > 0)
+        // 빨려들어오기 (베지어 곡선)
+        Vector3 pullStartPos = transform.position;
+        timer = 0f;
+
+        while (timer < magnetPullDuration)
+        {
+            if (target == null || !target.IsAlive)
             {
-                SpawnRemainingItem(remaining, target);
+                CancelMagnet();
+                yield break;
             }
 
+            timer += Time.deltaTime;
+            float t = timer / magnetPullDuration;
+
+            targetPos = target.transform.position + Vector3.up * 0.5f;
+            float easedT = EaseInQuad(t);
+
+            Vector3 midPoint = (pullStartPos + targetPos) / 2f + Vector3.up * 0.4f;
+            transform.position = QuadraticBezier(pullStartPos, midPoint, targetPos, easedT);
+            transform.localScale = originalScale * Mathf.Max(0.1f, 1f - 0.7f * easedT);
+
+            yield return null;
+        }
+
+        // ★ 완료 - 인벤 추가는 콜백에서 Unit이 처리
+        if (target != null && target.IsAlive)
+        {
+            onComplete?.Invoke(resource, amount);
+            Debug.Log($"[DroppedItem] 흡수 애니메이션 완료: {resource?.ResourceName} x{amount}");
             OnPickedUp?.Invoke(this);
             Destroy(gameObject);
         }
@@ -637,6 +477,14 @@ public class DroppedItem : MonoBehaviour
         {
             CancelMagnet();
         }
+    }
+
+    private void CancelMagnet()
+    {
+        isBeingMagneted = false;
+        isReserved = false;
+        reservedBy = null;
+        transform.localScale = originalScale;
     }
 
     /// <summary>
@@ -675,14 +523,6 @@ public class DroppedItem : MonoBehaviour
             // TaskManager에 등록
             TaskManager.Instance?.AddPickupItemTask(newItem);
         }
-    }
-
-    private void CancelMagnet()
-    {
-        isBeingMagneted = false;
-        isReserved = false;
-        reservedBy = null;
-        transform.localScale = originalScale;
     }
 
     // ==================== 기본 기능 ====================

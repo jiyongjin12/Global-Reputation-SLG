@@ -208,13 +208,13 @@ public enum BuildingUIType
 public enum WorkTaskType
 {
     None,
-    Farming,
-    Crafting,
-    Cooking,
-    Mining,
-    Woodcutting,
-    Hauling,
-    Storing,
+    Farming,            // 농업
+    Crafting,           // 제작
+    Cooking,            // 요리 
+    Mining,             // 채굴
+    Woodcutting,        // 목공
+    Hauling,            // 운송?
+    Storing,            // 저장
 }
 
 // StoredResource는 ResourceManager.cs에 정의되어 있음

@@ -26,6 +26,10 @@ MonoBehaviour:
     <ConstructionCosts>k__BackingField: []
     <MaxUnitCapacity>k__BackingField: 0
     <ShowInBuildMenu>k__BackingField: 1
+    <WorkTaskType>k__BackingField: 0
+    <AvailableRecipes>k__BackingField: []
+    <AutoProducedResource>k__BackingField: {fileID: 0}
+    <ProductionInterval>k__BackingField: 10
   - <Name>k__BackingField: 1x1 Box
     <ID>k__BackingField: 1
     <Size>k__BackingField: {x: 1, y: 1}
@@ -43,11 +47,15 @@ MonoBehaviour:
       <Amount>k__BackingField: 1
     <MaxUnitCapacity>k__BackingField: 4
     <ShowInBuildMenu>k__BackingField: 1
+    <WorkTaskType>k__BackingField: 0
+    <AvailableRecipes>k__BackingField: []
+    <AutoProducedResource>k__BackingField: {fileID: 0}
+    <ProductionInterval>k__BackingField: 10
   - <Name>k__BackingField: 2x2 Floor
     <ID>k__BackingField: 2
     <Size>k__BackingField: {x: 2, y: 2}
     <Type>k__BackingField: 1
-    <Category>k__BackingField: 1
+    <Category>k__BackingField: 3
     <Icon>k__BackingField: {fileID: 21300000, guid: 1d873c6f15219fc42a6f1f6e6b2b030f, type: 3}
     <Description>k__BackingField: "\uC124\uBA85 \uC124\uBA85 \uC124\uBA85 \uC124\uBA85"
     <Prefab>k__BackingField: {fileID: 1423105183262909642, guid: d5c95d3d870d6764189e07d83d55ab2b, type: 3}
@@ -62,3 +70,7 @@ MonoBehaviour:
       <Amount>k__BackingField: 8
     <MaxUnitCapacity>k__BackingField: 0
     <ShowInBuildMenu>k__BackingField: 1
+    <WorkTaskType>k__BackingField: 7
+    <AvailableRecipes>k__BackingField: []
+    <AutoProducedResource>k__BackingField: {fileID: 0}
+    <ProductionInterval>k__BackingField: 10

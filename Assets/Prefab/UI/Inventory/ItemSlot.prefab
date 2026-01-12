@@ -215,7 +215,6 @@ MonoBehaviour:
   borderImage: {fileID: 3981545326594126497}
   amountText: {fileID: 7248550478928861562}
   normalBorderColor: {r: 0.3, g: 0.3, b: 0.3, a: 1}
-  hoverBorderColor: {r: 0.8, g: 0.8, b: 0.8, a: 1}
   selectedBorderColor: {r: 1, g: 0.2, b: 0.2, a: 1}
   scaleOnSelect: 1.05
   animDuration: 0.1
