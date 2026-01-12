@@ -198,30 +198,25 @@ public class UnitAi : MonoBehaviour
 
     /// <summary>
     /// ★ 근처의 enableMagnet 아이템 흡수 호출
-    /// Unit이 판단 → 인벤 계산 → PlayAbsorbAnimation 호출 → 콜백에서 인벤 추가
+    /// 가상 예약 시스템: 흡수 시작 시 공간 미리 차감하여 초과 방지
+    /// 공간 부족 시 포기하지 않고 대기 (저장고 갔다 와서 다시 시도)
     /// </summary>
     private void TryAbsorbNearbyMagnetItems()
     {
-        // 흡수 간격 체크
         magnetAbsorbTimer += Time.deltaTime;
         if (magnetAbsorbTimer < MAGNET_ABSORB_INTERVAL) return;
         magnetAbsorbTimer = 0f;
 
-        // ★ pendingMagnetItems 정리 (Destroy되거나 흡수 완료된 것 제거)
         pendingMagnetItems.RemoveAll(item => item == null || !item);
 
-        // 인벤토리가 꽉 찼으면 대기 리스트 비우고 종료
+        // 인벤토리가 꽉 찼으면 흡수 시도 안 함 (아이템은 대기 리스트에 유지)
         if (unit.Inventory.IsFull)
         {
-            if (pendingMagnetItems.Count > 0)
-            {
-                Debug.Log($"[UnitAI] {unit.UnitName}: 인벤 꽉 참 → 남은 자석 아이템 {pendingMagnetItems.Count}개 포기");
-                pendingMagnetItems.Clear();
-            }
-            return;
+            return;  // ★ 포기하지 않고 유지!
         }
 
-        // ★ pendingMagnetItems에서 흡수 가능한 아이템만 필터링
+        // ★ 가상 공간 맵: 리소스별로 '현재 사용 가능한 공간' 추적
+        var virtualSpaceMap = new Dictionary<ResourceItemSO, int>();
         var itemsToAbsorb = new List<DroppedItem>();
 
         for (int i = pendingMagnetItems.Count - 1; i >= 0; i--)
@@ -233,7 +228,7 @@ public class UnitAi : MonoBehaviour
                 continue;
             }
 
-            // 이미 흡수 중이면 리스트에서 제거
+            // 이미 흡수 중이면 제거
             if (item.IsBeingMagneted)
             {
                 pendingMagnetItems.RemoveAt(i);
@@ -243,43 +238,50 @@ public class UnitAi : MonoBehaviour
             // 바닥 튕기기 중이면 대기
             if (item.IsAnimating) continue;
 
-            // 거리 체크
+            // 거리 체크 - 멀면 대기 (제거하지 않음)
             float dist = Vector3.Distance(transform.position, item.transform.position);
             if (dist > magnetAbsorbRadius) continue;
 
-            // 인벤에 넣을 수 있는지
-            if (!unit.Inventory.CanAddAny(item.Resource))
-            {
-                // 이 자원은 넣을 수 없음 → 포기
-                pendingMagnetItems.RemoveAt(i);
-                Debug.Log($"[UnitAI] {unit.UnitName}: {item.Resource?.ResourceName} 공간 없음 → 포기");
-                continue;
-            }
-
-            int availableSpace = unit.Inventory.GetAvailableSpaceFor(item.Resource);
-            if (availableSpace <= 0)
+            var resource = item.Resource;
+            if (resource == null)
             {
                 pendingMagnetItems.RemoveAt(i);
                 continue;
             }
 
-            // 흡수 가능! 리스트에 추가
-            itemsToAbsorb.Add(item);
-            pendingMagnetItems.RemoveAt(i);
+            // ★ 가상 공간 초기화
+            if (!virtualSpaceMap.ContainsKey(resource))
+            {
+                virtualSpaceMap[resource] = unit.Inventory.GetAvailableSpaceFor(resource);
+            }
+
+            int availableSpace = virtualSpaceMap[resource];
+            int itemAmount = item.Amount;
+
+            // ★ 공간 충분: 전체 흡수
+            if (availableSpace >= itemAmount)
+            {
+                virtualSpaceMap[resource] -= itemAmount;
+                itemsToAbsorb.Add(item);
+                pendingMagnetItems.RemoveAt(i);
+            }
+            // ★ 공간 부족: 대기 리스트에 유지 (포기하지 않음!)
+            // 저장고 갔다 와서 다시 시도
         }
 
-        // ★ 흡수 애니메이션 시작
+        // ★ 결정된 아이템들만 흡수 애니메이션 실행
         foreach (var item in itemsToAbsorb)
         {
-            // 콜백에서 인벤토리 추가
-            item.PlayAbsorbAnimation(unit, (resource, amount) =>
+            var resource = item.Resource;
+            int amount = item.Amount;
+
+            item.PlayAbsorbAnimation(unit, (res, amt) =>
             {
-                // ★ 콜백: 인벤에 실제로 추가
-                int added = unit.Inventory.AddItem(resource, amount);
-                Debug.Log($"[UnitAI] {unit.UnitName}: {resource?.ResourceName} x{added} 인벤 추가 완료");
+                int added = unit.Inventory.AddItem(res, amt);
+                Debug.Log($"[UnitAI] {unit.UnitName}: {res?.ResourceName} x{added} 인벤 추가 완료");
             });
 
-            Debug.Log($"[UnitAI] {unit.UnitName}: {item.Resource?.ResourceName} x{item.Amount} 흡수 시작");
+            Debug.Log($"[UnitAI] {unit.UnitName}: {resource?.ResourceName} x{amount} 흡수 시작");
         }
     }
 
@@ -338,12 +340,42 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // ★ 흡수 대기 아이템이 있으면 새 작업 받지 않고 대기
+        // ★ 흡수 대기 아이템 처리
         if (pendingMagnetItems.Count > 0)
         {
-            // TryAbsorbNearbyMagnetItems()에서 처리됨 (Update에서 호출)
-            // 새 작업 받지 않고 현재 위치에서 대기
-            return;
+            // 인벤 꽉 차면 저장고로 (대기 아이템은 유지)
+            if (unit.Inventory.IsFull)
+            {
+                Debug.Log($"[UnitAI] {unit.UnitName}: 인벤 꽉 참 + 대기 아이템 {pendingMagnetItems.Count}개 → 저장고로");
+                StartDeliveryToStorage();
+                return;
+            }
+
+            // ★ 흡수 가능한 아이템이 있는지 체크
+            if (HasAbsorbablePendingItems())
+            {
+                // 흡수 가능한 아이템으로 이동
+                MoveToNearestAbsorbableItem();
+                return;
+            }
+            else
+            {
+                // ★ 대기 아이템은 있지만 공간 부족 → 저장고로
+                Debug.Log($"[UnitAI] {unit.UnitName}: 대기 아이템 {pendingMagnetItems.Count}개 있지만 공간 부족 → 저장고로");
+                StartDeliveryToStorage();
+                return;
+            }
+        }
+
+        // ★ 인벤이 꽉 찼으면 바로 저장고로
+        if (unit.Inventory.IsFull)
+        {
+            if (currentBehavior != AIBehaviorState.DeliveringToStorage)
+            {
+                Debug.Log($"[UnitAI] {unit.UnitName}: 인벤 꽉 참 → 저장고로 이동");
+                StartDeliveryToStorage();
+                return;
+            }
         }
 
         if (bb.Hunger <= hungerSeekThreshold && TrySeekFood())
@@ -1334,17 +1366,38 @@ public class UnitAi : MonoBehaviour
     }
 
     /// <summary>
-    /// ���� �۾����� �����ϰų� �� �۾� ã�� �Ǵ� Idle
+    /// 이전 작업으로 복귀하거나 새 작업 찾기 또는 Idle
     /// </summary>
     private void ReturnToPreviousTaskOrIdle()
     {
-        // ★ 흡수 대기 아이템이 있으면 새 작업 받지 않음
+        // ★ 대기 중인 자석 아이템 정리
         pendingMagnetItems.RemoveAll(item => item == null || !item);
+
+        // ★ 인벤이 꽉 찼으면 바로 저장고로
+        if (unit.Inventory.IsFull)
+        {
+            // 대기 아이템은 유지 (저장고 갔다 와서 다시 줍기 위해)
+            Debug.Log($"[UnitAI] {unit.UnitName}: 인벤 꽉 참 → 저장고로 이동");
+            StartDeliveryToStorage();
+            return;
+        }
+
+        // ★ 대기 중인 자석 아이템 처리
         if (pendingMagnetItems.Count > 0)
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: 흡수 대기 중 ({pendingMagnetItems.Count}개) → 새 작업 안 받음");
-            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
-            return;
+            if (HasAbsorbablePendingItems())
+            {
+                // 흡수 가능한 아이템으로 이동
+                MoveToNearestAbsorbableItem();
+                return;
+            }
+            else
+            {
+                // 대기 아이템은 있지만 공간 부족 → 저장고로
+                Debug.Log($"[UnitAI] {unit.UnitName}: 대기 아이템 {pendingMagnetItems.Count}개 있지만 공간 부족 → 저장고로");
+                StartDeliveryToStorage();
+                return;
+            }
         }
 
         // 1. 이전 작업으로 복귀 시도
@@ -1370,8 +1423,98 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // 3. 작업 없으면 Idle
+        // ★ 3. 작업 없고 인벤에 아이템 있으면 저장고로
+        if (!unit.Inventory.IsEmpty && ShouldDepositWhenIdle())
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: 작업 없음 + 인벤에 아이템 있음 → 저장고로");
+            StartDeliveryToStorage();
+            return;
+        }
+
+        // 4. 작업 없으면 Idle
         SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+    }
+
+    /// <summary>
+    /// ★ 대기 중인 아이템 중 현재 흡수 가능한 것이 있는지 체크
+    /// </summary>
+    private bool HasAbsorbablePendingItems()
+    {
+        foreach (var item in pendingMagnetItems)
+        {
+            if (item == null || !item) continue;
+            if (item.Resource == null) continue;
+
+            int space = unit.Inventory.GetAvailableSpaceFor(item.Resource);
+            if (space >= item.Amount)
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// ★ 흡수 가능한 가장 가까운 대기 아이템으로 이동
+    /// </summary>
+    private void MoveToNearestAbsorbableItem()
+    {
+        DroppedItem nearest = null;
+        float nearestDist = float.MaxValue;
+
+        foreach (var item in pendingMagnetItems)
+        {
+            if (item == null || !item) continue;
+            if (item.Resource == null) continue;
+
+            // ★ 흡수 가능한 아이템만 대상
+            int space = unit.Inventory.GetAvailableSpaceFor(item.Resource);
+            if (space < item.Amount) continue;
+
+            float dist = Vector3.Distance(transform.position, item.transform.position);
+            if (dist < nearestDist)
+            {
+                nearestDist = dist;
+                nearest = item;
+            }
+        }
+
+        if (nearest != null)
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: 흡수 가능 아이템으로 이동 ({nearest.Resource?.ResourceName} x{nearest.Amount}, 거리: {nearestDist:F1}m)");
+            unit.MoveTo(nearest.transform.position);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+        }
+    }
+
+    /// <summary>
+    /// ★ 가장 가까운 대기 중인 자석 아이템으로 이동 (흡수 가능 여부 무관)
+    /// </summary>
+    private void MoveToNearestPendingItem()
+    {
+        if (pendingMagnetItems.Count == 0) return;
+
+        // 가장 가까운 아이템 찾기
+        DroppedItem nearest = null;
+        float nearestDist = float.MaxValue;
+
+        foreach (var item in pendingMagnetItems)
+        {
+            if (item == null || !item) continue;
+
+            float dist = Vector3.Distance(transform.position, item.transform.position);
+            if (dist < nearestDist)
+            {
+                nearestDist = dist;
+                nearest = item;
+            }
+        }
+
+        if (nearest != null)
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: 대기 아이템으로 이동 ({nearest.Resource?.ResourceName}, 거리: {nearestDist:F1}m)");
+            unit.MoveTo(nearest.transform.position);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+            // ★ 범위 내 들어오면 TryAbsorbNearbyMagnetItems()에서 자동 흡수됨
+        }
     }
 
     /// <summary>
@@ -1516,8 +1659,8 @@ public class UnitAi : MonoBehaviour
         // 인벤토리가 비어있으면 저장할 필요 없음
         if (unit.Inventory.IsEmpty) return false;
 
-        // 인벤이 꽉 차지 않았으면 저장 필요 없음
-        if (!unit.Inventory.IsFull) return false;
+        // 저장고가 없으면 저장 불가
+        if (FindNearestStorage() == null) return false;
 
         // 작업이 있는지 확인
         if (TaskManager.Instance != null)
@@ -1525,17 +1668,17 @@ public class UnitAi : MonoBehaviour
             var availableTask = TaskManager.Instance.FindNearestTask(unit);
             if (availableTask != null)
             {
-                // ★ 채집 작업이면 저장고로 (인벤 꽉 차서 채집 못 함)
-                if (availableTask.Data.Type == TaskType.Harvest)
+                // ★ 인벤 꽉 참 + 채집 작업만 있음 → 저장고로
+                if (unit.Inventory.IsFull && availableTask.Data.Type == TaskType.Harvest)
                 {
                     return true;
                 }
-                // 건설 등 다른 작업은 할 수 있으므로 저장 안 함
+                // 할 수 있는 작업이 있으면 저장 안 함
                 return false;
             }
         }
 
-        // 작업이 없고 인벤이 꽉 찼으면 저장
+        // ★ 작업이 없고 인벤에 아이템이 있으면 저장 (꽉 차지 않아도!)
         return true;
     }
 
