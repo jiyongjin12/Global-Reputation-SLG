@@ -12,9 +12,10 @@ public enum AIBehaviorState
     Working,
     PickingUpItem,
     DeliveringToStorage,
-    WaitingForStorage,  // �� ����� ��� ����
+    WaitingForStorage,
     ExecutingCommand,
-    WorkingAtStation  // �� �߰�
+    WorkingAtStation,
+    Socializing         // ★ 사회적 상호작용 중
 }
 
 public enum TaskPriorityLevel
@@ -22,7 +23,7 @@ public enum TaskPriorityLevel
     PlayerCommand = 0,
     Survival = 1,
     Construction = 2,
-    Workstation = 3,  // �� �߰�
+    Workstation = 3,
     ItemPickup = 4,
     Harvest = 5,
     FreeWill = 6
@@ -36,19 +37,17 @@ public enum TaskPhase
     Relocating
 }
 
-/// <summary>
-/// ����� ��� �ܰ�
-/// </summary>
 public enum DeliveryPhase
 {
     None,
-    MovingToStorage,    // ������� �̵� ��
-    Depositing          // ���� ��
+    MovingToStorage,
+    Depositing
 }
 
 // ==================== Main Class ====================
 
-public class UnitAi : MonoBehaviour
+[RequireComponent(typeof(Unit))]
+public class UnitAI : MonoBehaviour
 {
     // ==================== Nested Class ====================
 
@@ -94,52 +93,82 @@ public class UnitAi : MonoBehaviour
         }
     }
 
-    // ==================== Fields ====================
+    // ==================== Serialized Fields ====================
 
-    [Header("=== �⺻ ���� ===")]
+    [Header("=== 기본 설정 ===")]
     [SerializeField] private float decisionInterval = 0.5f;
     [SerializeField] private float workRadius = 0.8f;
     [SerializeField] private float wanderRadius = 10f;
 
-    [Header("=== ����� ���� ===")]
+    [Header("=== 배고픔 설정 ===")]
     [SerializeField] private float hungerDecreasePerMinute = 3f;
     [SerializeField] private float foodSearchRadius = 20f;
     [SerializeField] private float hungerSeekThreshold = 50f;
     [SerializeField] private float hungerCriticalThreshold = 20f;
 
-    [Header("=== ������ �ݱ� ���� ===")]
+    [Header("=== 아이템 줍기 ===")]
     [SerializeField] private float itemPickupDuration = 1f;
     [SerializeField] private float pickupRadius = 1.5f;
 
-    [Header("=== ����� ===")]
+    [Header("=== 저장고 배달 ===")]
+    [SerializeField] private float depositDuration = 2f;
+    [SerializeField] private float storageSearchRadius = 50f;
+
+    [Header("=== 자석 흡수 ===")]
+    [SerializeField] private float magnetAbsorbRadius = 3f;
+
+    [Header("=== 사회적 상호작용 ===")]
+    [SerializeField] private float socialInteractionChance = 0.4f;
+    [SerializeField] private float socialSearchRadius = 8f;
+
+    [Header("=== 디버그 ===")]
     [SerializeField] private AIBehaviorState currentBehavior = AIBehaviorState.Idle;
     [SerializeField] private TaskPriorityLevel currentPriority = TaskPriorityLevel.FreeWill;
 
+    // ==================== Private Fields ====================
+
+    // Components
     private Unit unit;
     private UnitBlackboard bb;
     private NavMeshAgent agent;
-    private TaskContext taskContext = new();
+    private UnitMovement movement;
+    private UnitSocialInteraction socialInteraction;
 
+    // Task Context
+    private TaskContext taskContext = new();
+    private PostedTask previousTask;
+
+    // Timers
     private float lastDecisionTime;
     private float pickupTimer;
+    private float magnetAbsorbTimer;
+    private float lastStorageCheckTime = -10f;
 
-    private PostedTask previousTask;
+    // Item Management
     private List<DroppedItem> personalItems = new();
+    private List<DroppedItem> pendingMagnetItems = new();
     private DroppedItem currentPersonalItem;
 
-    // �� ��ũ�����̼� �۾���
+    // Workstation
     private IWorkstation currentWorkstation;
-    private bool isWorkstationWorkStarted = false;
+    private bool isWorkstationWorkStarted;
 
-    // �� ����� ��޿�
+    // Delivery
     private DeliveryPhase deliveryPhase = DeliveryPhase.None;
     private Vector3 storagePosition;
     private StorageComponent targetStorage;
-    private float depositTimer = 0f;
-    [Header("=== ����� ��� ���� ===")]
-    [SerializeField] private float depositDuration = 2f;  // ���忡 �ɸ��� �ð�
-    [SerializeField] private float storageSearchRadius = 50f;
+    private float depositTimer;
 
+    // Social
+    private Unit socialTarget;
+    private bool isApproachingForSocial;
+
+    // Cache
+    private bool hasStorageBuilding;
+    private const float STORAGE_CHECK_INTERVAL = 5f;
+    private const float MAGNET_ABSORB_INTERVAL = 0.2f;
+
+    // Debug
     private Vector3 debugBuildingCenter;
     private float debugBoxHalfX, debugBoxHalfZ;
 
@@ -150,145 +179,54 @@ public class UnitAi : MonoBehaviour
     public bool HasTask => taskContext.HasTask;
     public bool IsIdle => currentBehavior == AIBehaviorState.Idle || currentBehavior == AIBehaviorState.Wandering;
 
-    // �� ����� ���� ���� ĳ��
-    private bool hasStorageBuilding = false;
-    private float lastStorageCheckTime = -10f;
-    private const float STORAGE_CHECK_INTERVAL = 5f;  // 5�ʸ��� üũ
-
     // ==================== Unity Methods ====================
 
     private void Awake()
     {
         unit = GetComponent<Unit>();
         agent = GetComponent<NavMeshAgent>();
+        movement = GetComponent<UnitMovement>();
+        socialInteraction = GetComponent<UnitSocialInteraction>();
     }
 
     private void Start()
     {
         bb = unit.Blackboard;
         if (bb != null)
+        {
             bb.OnHungerCritical += OnHungerCritical;
+            bb.OnStressCritical += OnStressCritical;
+        }
     }
 
     private void Update()
     {
         if (bb == null || !bb.IsAlive) return;
 
+        // 배고픔 감소
         bb.DecreaseHunger((hungerDecreasePerMinute / 60f) * Time.deltaTime);
         if (bb.IsStarving)
             unit.TakeDamage(Time.deltaTime * 5f);
 
+        // 의사결정
         if (Time.time - lastDecisionTime >= decisionInterval)
         {
             MakeDecision();
             lastDecisionTime = Time.time;
         }
 
-        // ★ 자석 아이템 흡수 체크 (매 프레임)
+        // 자석 아이템 흡수 체크
         TryAbsorbNearbyMagnetItems();
 
+        // 현재 행동 실행
         ExecuteCurrentBehavior();
     }
 
-    // ★ 자석 흡수 관련 변수
-    [Header("=== 자석 흡수 ===")]
-    [SerializeField] private float magnetAbsorbRadius = 3f;
-    private float magnetAbsorbTimer = 0f;
-    private const float MAGNET_ABSORB_INTERVAL = 0.2f;  // 0.2초마다 체크
-
-    /// <summary>
-    /// ★ 근처의 enableMagnet 아이템 흡수 호출
-    /// 가상 예약 시스템: 흡수 시작 시 공간 미리 차감하여 초과 방지
-    /// 공간 부족 시 포기하지 않고 대기 (저장고 갔다 와서 다시 시도)
-    /// </summary>
-    private void TryAbsorbNearbyMagnetItems()
-    {
-        magnetAbsorbTimer += Time.deltaTime;
-        if (magnetAbsorbTimer < MAGNET_ABSORB_INTERVAL) return;
-        magnetAbsorbTimer = 0f;
-
-        pendingMagnetItems.RemoveAll(item => item == null || !item);
-
-        // 인벤토리가 꽉 찼으면 흡수 시도 안 함 (아이템은 대기 리스트에 유지)
-        if (unit.Inventory.IsFull)
-        {
-            return;  // ★ 포기하지 않고 유지!
-        }
-
-        // ★ 가상 공간 맵: 리소스별로 '현재 사용 가능한 공간' 추적
-        var virtualSpaceMap = new Dictionary<ResourceItemSO, int>();
-        var itemsToAbsorb = new List<DroppedItem>();
-
-        for (int i = pendingMagnetItems.Count - 1; i >= 0; i--)
-        {
-            var item = pendingMagnetItems[i];
-            if (item == null || !item)
-            {
-                pendingMagnetItems.RemoveAt(i);
-                continue;
-            }
-
-            // 이미 흡수 중이면 제거
-            if (item.IsBeingMagneted)
-            {
-                pendingMagnetItems.RemoveAt(i);
-                continue;
-            }
-
-            // 바닥 튕기기 중이면 대기
-            if (item.IsAnimating) continue;
-
-            // 거리 체크 - 멀면 대기 (제거하지 않음)
-            float dist = Vector3.Distance(transform.position, item.transform.position);
-            if (dist > magnetAbsorbRadius) continue;
-
-            var resource = item.Resource;
-            if (resource == null)
-            {
-                pendingMagnetItems.RemoveAt(i);
-                continue;
-            }
-
-            // ★ 가상 공간 초기화
-            if (!virtualSpaceMap.ContainsKey(resource))
-            {
-                virtualSpaceMap[resource] = unit.Inventory.GetAvailableSpaceFor(resource);
-            }
-
-            int availableSpace = virtualSpaceMap[resource];
-            int itemAmount = item.Amount;
-
-            // ★ 공간 충분: 전체 흡수
-            if (availableSpace >= itemAmount)
-            {
-                virtualSpaceMap[resource] -= itemAmount;
-                itemsToAbsorb.Add(item);
-                pendingMagnetItems.RemoveAt(i);
-            }
-            // ★ 공간 부족: 대기 리스트에 유지 (포기하지 않음!)
-            // 저장고 갔다 와서 다시 시도
-        }
-
-        // ★ 결정된 아이템들만 흡수 애니메이션 실행
-        foreach (var item in itemsToAbsorb)
-        {
-            var resource = item.Resource;
-            int amount = item.Amount;
-
-            item.PlayAbsorbAnimation(unit, (res, amt) =>
-            {
-                int added = unit.Inventory.AddItem(res, amt);
-                Debug.Log($"[UnitAI] {unit.UnitName}: {res?.ResourceName} x{added} 인벤 추가 완료");
-            });
-
-            Debug.Log($"[UnitAI] {unit.UnitName}: {resource?.ResourceName} x{amount} 흡수 시작");
-        }
-    }
-
-    // ==================== �ǻ���� ====================
+    // ==================== Decision Making ====================
 
     private void MakeDecision()
     {
+        // 1. 플레이어 명령 최우선
         if (bb.HasPlayerCommand && bb.PlayerCommand != null)
         {
             InterruptCurrentTask();
@@ -296,6 +234,7 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
+        // 2. 생존 - 극심한 배고픔
         if (bb.Hunger <= hungerCriticalThreshold && currentPriority > TaskPriorityLevel.Survival)
         {
             if (TrySeekFood())
@@ -306,33 +245,26 @@ public class UnitAi : MonoBehaviour
             }
         }
 
-        if (taskContext.HasTask)
-            return;
+        // 3. 현재 작업 진행 중이면 유지
+        if (taskContext.HasTask) return;
 
-        // �� ����� ��� ���̸� ���
-        if (currentBehavior == AIBehaviorState.DeliveringToStorage)
-            return;
+        // 4. 저장고 배달 중이면 유지
+        if (currentBehavior == AIBehaviorState.DeliveringToStorage) return;
 
-        // �� ����� ��� ���̸� �Ǽ� �۾��� �ޱ�
+        // 5. 저장고 대기 중이면 건설 작업만 확인
         if (currentBehavior == AIBehaviorState.WaitingForStorage)
         {
-            if (TryPullConstructionTask())
-                return;
-            // �Ǽ� �۾� ������ ��� ���
+            TryPullConstructionTask();
             return;
         }
 
-        // ★ Unity null 체크 + 흡수 중인 아이템 제외
-        if (currentPersonalItem != null && !currentPersonalItem)
-            currentPersonalItem = null;
-        if (currentPersonalItem != null && currentPersonalItem.IsBeingMagneted)
-            currentPersonalItem = null;
-        personalItems.RemoveAll(item => item == null || !item || item.IsBeingMagneted);
+        // 6. 상호작용 중이면 유지
+        if (currentBehavior == AIBehaviorState.Socializing) return;
 
-        // ★ 흡수 대기 아이템 정리 (Destroy되거나 흡수 완료된 것 제거)
-        pendingMagnetItems.RemoveAll(item => item == null || !item);
+        // 7. 아이템 정리
+        CleanupItemLists();
 
-        // 개인 아이템 줍기 (흡수 중 아닌 것만)
+        // 8. 개인 아이템 줍기
         if (currentPersonalItem != null || personalItems.Count > 0)
         {
             if (currentBehavior != AIBehaviorState.PickingUpItem)
@@ -340,72 +272,128 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // ★ 흡수 대기 아이템 처리
-        if (pendingMagnetItems.Count > 0)
-        {
-            // 인벤 꽉 차면 저장고로 (대기 아이템은 유지)
-            if (unit.Inventory.IsFull)
-            {
-                Debug.Log($"[UnitAI] {unit.UnitName}: 인벤 꽉 참 + 대기 아이템 {pendingMagnetItems.Count}개 → 저장고로");
-                StartDeliveryToStorage();
-                return;
-            }
+        // 9. 대기 중인 자석 아이템 처리
+        if (HandlePendingMagnetItems()) return;
 
-            // ★ 흡수 가능한 아이템이 있는지 체크
-            if (HasAbsorbablePendingItems())
-            {
-                // 흡수 가능한 아이템으로 이동
-                MoveToNearestAbsorbableItem();
-                return;
-            }
-            else
-            {
-                // ★ 대기 아이템은 있지만 공간 부족 → 저장고로
-                Debug.Log($"[UnitAI] {unit.UnitName}: 대기 아이템 {pendingMagnetItems.Count}개 있지만 공간 부족 → 저장고로");
-                StartDeliveryToStorage();
-                return;
-            }
-        }
-
-        // ★ 인벤이 꽉 찼으면 바로 저장고로
+        // 10. 인벤토리 꽉 참 → 저장고로
         if (unit.Inventory.IsFull)
         {
             if (currentBehavior != AIBehaviorState.DeliveringToStorage)
             {
-                Debug.Log($"[UnitAI] {unit.UnitName}: 인벤 꽉 참 → 저장고로 이동");
                 StartDeliveryToStorage();
                 return;
             }
         }
 
+        // 11. 일반 배고픔 시 음식 찾기
         if (bb.Hunger <= hungerSeekThreshold && TrySeekFood())
         {
             SetBehaviorAndPriority(AIBehaviorState.SeekingFood, TaskPriorityLevel.Survival);
             return;
         }
 
+        // 12. Idle 상태에서의 행동
         if (currentBehavior == AIBehaviorState.Idle || currentBehavior == AIBehaviorState.Wandering)
         {
-            // �� �۾��� ���� ã��
-            if (TryPullTask())
-                return;
+            // 작업 찾기
+            if (TryPullTask()) return;
 
-            // �� �۾��� ���� �κ��� �� á���� �������
+            // 인벤 비우기
             if (ShouldDepositWhenIdle())
             {
-                Debug.Log($"[UnitAI] {unit.UnitName}: �۾� ���� + �κ��丮 ������ �� �������");
                 StartDeliveryToStorage();
                 return;
             }
         }
 
+        // 13. 자유 행동
         if (currentBehavior == AIBehaviorState.Idle)
         {
             PerformFreeWill();
         }
     }
 
-    // ==================== �۾� Pull ====================
+    /// <summary>
+    /// 아이템 리스트 정리 (null, Destroy된 것, 흡수 중인 것 제거)
+    /// </summary>
+    private void CleanupItemLists()
+    {
+        // 현재 아이템 체크
+        if (currentPersonalItem != null && (!currentPersonalItem || currentPersonalItem.IsBeingMagneted))
+            currentPersonalItem = null;
+
+        // 개인 아이템 리스트 정리
+        personalItems.RemoveAll(item => item == null || !item || item.IsBeingMagneted);
+
+        // 자석 아이템 리스트 정리
+        pendingMagnetItems.RemoveAll(item => item == null || !item);
+    }
+
+    /// <summary>
+    /// 대기 중인 자석 아이템 처리
+    /// </summary>
+    private bool HandlePendingMagnetItems()
+    {
+        if (pendingMagnetItems.Count == 0) return false;
+
+        // 인벤 꽉 차면 저장고로
+        if (unit.Inventory.IsFull)
+        {
+            StartDeliveryToStorage();
+            return true;
+        }
+
+        // 흡수 가능한 아이템으로 이동
+        if (HasAbsorbablePendingItems())
+        {
+            MoveToNearestAbsorbableItem();
+            return true;
+        }
+
+        // 공간 부족 시 저장고로
+        StartDeliveryToStorage();
+        return true;
+    }
+
+    // ==================== Behavior Execution ====================
+
+    private void ExecuteCurrentBehavior()
+    {
+        switch (currentBehavior)
+        {
+            case AIBehaviorState.Idle:
+                break;
+            case AIBehaviorState.Wandering:
+                UpdateWandering();
+                break;
+            case AIBehaviorState.SeekingFood:
+                UpdateSeekingFood();
+                break;
+            case AIBehaviorState.Working:
+                UpdateWorking();
+                break;
+            case AIBehaviorState.WorkingAtStation:
+                UpdateWorkingAtStation();
+                break;
+            case AIBehaviorState.PickingUpItem:
+                UpdatePickingUpItem();
+                break;
+            case AIBehaviorState.DeliveringToStorage:
+                UpdateDeliveryToStorage();
+                break;
+            case AIBehaviorState.WaitingForStorage:
+                UpdateWaitingForStorage();
+                break;
+            case AIBehaviorState.ExecutingCommand:
+                UpdatePlayerCommand();
+                break;
+            case AIBehaviorState.Socializing:
+                UpdateSocializing();
+                break;
+        }
+    }
+
+    // ==================== Task Management ====================
 
     private bool TryPullTask()
     {
@@ -414,34 +402,9 @@ public class UnitAi : MonoBehaviour
         var task = TaskManager.Instance.FindNearestTask(unit);
         if (task == null) return false;
 
-        // ★ 채집 작업인 경우 인벤토리 체크
-        if (task.Data.Type == TaskType.Harvest)
-        {
-            // 인벤이 완전히 꽉 찼으면 채집 작업 받지 않음
-            if (unit.Inventory.IsFull)
-            {
-                Debug.Log($"[UnitAI] {unit.UnitName}: 인벤 꽉 참 → 채집 작업 스킵, 저장고로");
-                return false;
-            }
-
-            // 해당 자원 공간이 없으면 채집 작업 받지 않음
-            var node = task.Owner as ResourceNode;
-            if (node?.Data?.Drops != null)
-            {
-                foreach (var drop in node.Data.Drops)
-                {
-                    if (drop.Resource != null)
-                    {
-                        if (!unit.Inventory.CanAddAny(drop.Resource))
-                        {
-                            Debug.Log($"[UnitAI] {unit.UnitName}: {drop.Resource.ResourceName} 공간 없음 → 채집 스킵");
-                            return false;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
+        // 채집 작업 시 인벤토리 체크
+        if (task.Data.Type == TaskType.Harvest && !CanAcceptHarvestTask(task))
+            return false;
 
         if (!TaskManager.Instance.TakeTask(task, unit))
             return false;
@@ -450,28 +413,32 @@ public class UnitAi : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// �� �Ǽ� �۾��� �������� (����� ��� �߿��� �Ǽ��� ��)
-    /// </summary>
     private bool TryPullConstructionTask()
     {
         if (TaskManager.Instance == null) return false;
 
         var task = TaskManager.Instance.FindNearestTask(unit);
-        if (task == null) return false;
+        if (task == null || task.Data.Type != TaskType.Construct) return false;
 
-        // �Ǽ� �۾��� ����
-        if (task.Data.Type != TaskType.Construct)
-            return false;
+        if (!TaskManager.Instance.TakeTask(task, unit)) return false;
 
-        if (!TaskManager.Instance.TakeTask(task, unit))
-            return false;
-
-        // ����� ��� ���� ����
         ClearDeliveryState();
-
         AssignTask(task);
-        Debug.Log($"[UnitAI] {unit.UnitName}: ����� ��� �� �Ǽ� �۾� ����");
+        return true;
+    }
+
+    private bool CanAcceptHarvestTask(PostedTask task)
+    {
+        if (unit.Inventory.IsFull) return false;
+
+        var node = task.Owner as ResourceNode;
+        if (node?.Data?.Drops == null) return true;
+
+        foreach (var drop in node.Data.Drops)
+        {
+            if (drop.Resource != null && !unit.Inventory.CanAddAny(drop.Resource))
+                return false;
+        }
         return true;
     }
 
@@ -479,7 +446,6 @@ public class UnitAi : MonoBehaviour
     {
         taskContext.Clear();
         taskContext.Task = task;
-
         bb.CurrentTask = task;
         bb.TargetObject = task.Data.TargetObject;
 
@@ -494,15 +460,13 @@ public class UnitAi : MonoBehaviour
             case TaskType.PickupItem:
                 AssignPickupTask(task);
                 break;
-            case TaskType.Workstation:  // �� �߰�
+            case TaskType.Workstation:
                 AssignWorkstationTask(task);
                 break;
             default:
                 AssignGenericTask(task);
                 break;
         }
-
-        Debug.Log($"[UnitAI] {unit.UnitName}: �۾� �Ҵ� - {task.Data.Type}, Phase: {taskContext.Phase}");
     }
 
     private void AssignConstructionTask(PostedTask task)
@@ -512,33 +476,19 @@ public class UnitAi : MonoBehaviour
         taskContext.TargetSize = size;
 
         Vector3 workPos = CalculateDistributedWorkPosition(task.Data.TargetPosition, size);
-
-        taskContext.SetMoving(workPos);
-        bb.TargetPosition = workPos;
-        unit.MoveTo(workPos);
-
-        SetBehaviorAndPriority(AIBehaviorState.Working, TaskPriorityLevel.Construction);
+        MoveToTaskPosition(workPos, AIBehaviorState.Working, TaskPriorityLevel.Construction);
     }
 
     private void AssignHarvestTask(PostedTask task)
     {
-        taskContext.SetMoving(task.Data.TargetPosition);
-        bb.TargetPosition = task.Data.TargetPosition;
-        unit.MoveTo(task.Data.TargetPosition);
-
-        SetBehaviorAndPriority(AIBehaviorState.Working, TaskPriorityLevel.Harvest);
+        MoveToTaskPosition(task.Data.TargetPosition, AIBehaviorState.Working, TaskPriorityLevel.Harvest);
     }
 
     private void AssignPickupTask(PostedTask task)
     {
-        taskContext.SetMoving(task.Data.TargetPosition);
-        bb.TargetPosition = task.Data.TargetPosition;
-        unit.MoveTo(task.Data.TargetPosition);
-
-        SetBehaviorAndPriority(AIBehaviorState.PickingUpItem, TaskPriorityLevel.ItemPickup);
+        MoveToTaskPosition(task.Data.TargetPosition, AIBehaviorState.PickingUpItem, TaskPriorityLevel.ItemPickup);
     }
 
-    // �� ��ũ�����̼� �۾� �Ҵ�
     private void AssignWorkstationTask(PostedTask task)
     {
         currentWorkstation = task.Owner as IWorkstation;
@@ -546,37 +496,33 @@ public class UnitAi : MonoBehaviour
 
         if (currentWorkstation == null)
         {
-            Debug.LogWarning("[UnitAI] ��ũ�����̼��� ã�� �� �����ϴ�.");
             CompleteCurrentTask();
             return;
         }
 
         Vector3 workPos = currentWorkstation.WorkPoint?.position ?? task.Data.TargetPosition;
-
-        taskContext.SetMoving(workPos);
-        bb.TargetPosition = workPos;
-        unit.MoveTo(workPos);
-
-        SetBehaviorAndPriority(AIBehaviorState.WorkingAtStation, TaskPriorityLevel.Workstation);
-
-        Debug.Log($"[UnitAI] {unit.UnitName}: ��ũ�����̼� �۾� �Ҵ� - {currentWorkstation.TaskType}");
+        MoveToTaskPosition(workPos, AIBehaviorState.WorkingAtStation, TaskPriorityLevel.Workstation);
     }
 
     private void AssignGenericTask(PostedTask task)
     {
-        taskContext.SetMoving(task.Data.TargetPosition);
-        bb.TargetPosition = task.Data.TargetPosition;
-        unit.MoveTo(task.Data.TargetPosition);
-
-        SetBehaviorAndPriority(AIBehaviorState.Working, TaskPriorityLevel.FreeWill);
+        MoveToTaskPosition(task.Data.TargetPosition, AIBehaviorState.Working, TaskPriorityLevel.FreeWill);
     }
 
-    // ==================== �۾� ��ġ ��� ====================
+    /// <summary>
+    /// 공통 이동 로직
+    /// </summary>
+    private void MoveToTaskPosition(Vector3 position, AIBehaviorState behavior, TaskPriorityLevel priority)
+    {
+        taskContext.SetMoving(position);
+        bb.TargetPosition = position;
+        unit.MoveTo(position);
+        SetBehaviorAndPriority(behavior, priority);
+    }
 
     private Vector3 CalculateDistributedWorkPosition(Vector3 origin, Vector2Int size)
     {
         Vector3 center = origin + new Vector3(size.x / 2f, 0, size.y / 2f);
-
         float halfX = size.x / 2f + 0.3f;
         float halfZ = size.y / 2f + 0.3f;
 
@@ -584,14 +530,13 @@ public class UnitAi : MonoBehaviour
         debugBoxHalfX = halfX;
         debugBoxHalfZ = halfZ;
 
-        float randomX = Random.Range(-halfX, halfX);
-        float randomZ = Random.Range(-halfZ, halfZ);
-        Vector3 targetPos = center + new Vector3(randomX, 0, randomZ);
+        Vector3 targetPos = center + new Vector3(
+            Random.Range(-halfX, halfX), 0,
+            Random.Range(-halfZ, halfZ)
+        );
 
-        if (NavMesh.SamplePosition(targetPos, out NavMeshHit hit, 1.5f, NavMesh.AllAreas))
-            return hit.position;
-
-        return center;
+        return NavMesh.SamplePosition(targetPos, out NavMeshHit hit, 1.5f, NavMesh.AllAreas)
+            ? hit.position : center;
     }
 
     public void UpdateAssignedWorkPosition(Vector3 newOrigin, Vector2Int size)
@@ -599,62 +544,17 @@ public class UnitAi : MonoBehaviour
         if (!taskContext.HasTask) return;
 
         Vector3 newWorkPos = CalculateDistributedWorkPosition(newOrigin, size);
-
         taskContext.SetRelocating(newWorkPos);
         taskContext.TargetSize = size;
-
         bb.TargetPosition = newWorkPos;
         unit.MoveTo(newWorkPos);
-
-        Debug.Log($"[UnitAI] {unit.UnitName}: ���ġ �� {newWorkPos}");
-    }
-
-    // ==================== �ൿ ���� ====================
-
-    private void ExecuteCurrentBehavior()
-    {
-        switch (currentBehavior)
-        {
-            case AIBehaviorState.Working:
-                UpdateWorking();
-                break;
-            case AIBehaviorState.WorkingAtStation:  // �� �߰�
-                UpdateWorkingAtStation();
-                break;
-            case AIBehaviorState.PickingUpItem:
-                UpdatePickingUpItem();
-                break;
-            case AIBehaviorState.SeekingFood:
-                UpdateSeekingFood();
-                break;
-            case AIBehaviorState.DeliveringToStorage:
-                UpdateDeliveryToStorage();
-                break;
-            case AIBehaviorState.WaitingForStorage:  // �� ����� ���
-                UpdateWaitingForStorage();
-                break;
-            case AIBehaviorState.ExecutingCommand:
-                UpdatePlayerCommand();
-                break;
-            case AIBehaviorState.Wandering:
-                UpdateWandering();
-                break;
-        }
     }
 
     // ==================== Working ====================
 
     private void UpdateWorking()
     {
-        if (!taskContext.HasTask)
-        {
-            CompleteCurrentTask();
-            return;
-        }
-
-        var task = taskContext.Task;
-
-        if (!ValidateTaskTarget(task))
+        if (!taskContext.HasTask || !ValidateTaskTarget(taskContext.Task))
         {
             CompleteCurrentTask();
             return;
@@ -672,7 +572,6 @@ public class UnitAi : MonoBehaviour
         }
     }
 
-    // �� ��ũ�����̼� �۾� ������Ʈ
     private void UpdateWorkingAtStation()
     {
         if (currentWorkstation == null)
@@ -692,22 +591,13 @@ public class UnitAi : MonoBehaviour
         }
     }
 
-    private void UpdateMovingToWorkstation()
+    private void UpdateMovingToWork()
     {
         float dist = Vector3.Distance(transform.position, taskContext.WorkPosition);
 
         if (dist <= workRadius)
         {
-            // �۾��� ����
-            if (!currentWorkstation.AssignWorker(unit))
-            {
-                Debug.LogWarning($"[UnitAI] {unit.UnitName}: ��ũ�����̼� �۾��� ���� ����!");
-                CompleteCurrentTask();
-                return;
-            }
-
             taskContext.SetWorking();
-            Debug.Log($"[UnitAI] {unit.UnitName}: ��ũ�����̼� ����, �۾� ����");
             return;
         }
 
@@ -717,61 +607,18 @@ public class UnitAi : MonoBehaviour
         }
     }
 
-    private void UpdateExecutingWorkstation()
-    {
-        if (currentWorkstation == null)
-        {
-            CompleteCurrentTask();
-            return;
-        }
-
-        // �۾� ���� (�� ����)
-        if (!isWorkstationWorkStarted && currentWorkstation.CanStartWork)
-        {
-            currentWorkstation.StartWork();
-            isWorkstationWorkStarted = true;
-        }
-
-        // �۾� ����
-        taskContext.WorkTimer += Time.deltaTime;
-        if (taskContext.WorkTimer >= 1f)
-        {
-            taskContext.WorkTimer = 0f;
-            float workAmount = unit.DoWork();
-            currentWorkstation.DoWork(workAmount);
-        }
-
-        // �۾� �Ϸ� üũ
-        var wsComponent = currentWorkstation as WorkstationComponent;
-        if (wsComponent != null)
-        {
-            if (!wsComponent.IsWorking && isWorkstationWorkStarted)
-            {
-                // ���� �۾��� �ִ��� Ȯ��
-                if (currentWorkstation.CanStartWork)
-                {
-                    isWorkstationWorkStarted = false;
-                    // �ٽ� �۾� ����
-                }
-                else
-                {
-                    // ��� �۾� �Ϸ�
-                    currentWorkstation.ReleaseWorker();
-                    TaskManager.Instance?.CompleteTask(taskContext.Task);
-                    CompleteCurrentTask();
-                }
-            }
-        }
-    }
-
-    private void UpdateMovingToWork()
+    private void UpdateMovingToWorkstation()
     {
         float dist = Vector3.Distance(transform.position, taskContext.WorkPosition);
 
         if (dist <= workRadius)
         {
+            if (!currentWorkstation.AssignWorker(unit))
+            {
+                CompleteCurrentTask();
+                return;
+            }
             taskContext.SetWorking();
-            Debug.Log($"[UnitAI] {unit.UnitName}: �۾� ��ġ ����, �۾� ����");
             return;
         }
 
@@ -792,22 +639,56 @@ public class UnitAi : MonoBehaviour
         }
     }
 
+    private void UpdateExecutingWorkstation()
+    {
+        if (currentWorkstation == null)
+        {
+            CompleteCurrentTask();
+            return;
+        }
+
+        // 작업 시작
+        if (!isWorkstationWorkStarted && currentWorkstation.CanStartWork)
+        {
+            currentWorkstation.StartWork();
+            isWorkstationWorkStarted = true;
+        }
+
+        // 작업 수행
+        taskContext.WorkTimer += Time.deltaTime;
+        if (taskContext.WorkTimer >= 1f)
+        {
+            taskContext.WorkTimer = 0f;
+            float workAmount = unit.DoWork();
+            currentWorkstation.DoWork(workAmount);
+        }
+
+        // 완료 체크
+        var wsComponent = currentWorkstation as WorkstationComponent;
+        if (wsComponent != null && !wsComponent.IsWorking && isWorkstationWorkStarted)
+        {
+            if (currentWorkstation.CanStartWork)
+            {
+                isWorkstationWorkStarted = false;
+            }
+            else
+            {
+                currentWorkstation.ReleaseWorker();
+                TaskManager.Instance?.CompleteTask(taskContext.Task);
+                CompleteCurrentTask();
+            }
+        }
+    }
+
     private bool ValidateTaskTarget(PostedTask task)
     {
-        switch (task.Data.Type)
+        return task.Data.Type switch
         {
-            case TaskType.Construct:
-                var building = task.Owner as Building;
-                return building != null && building.CurrentState != BuildingState.Completed;
-            case TaskType.Harvest:
-                var node = task.Owner as ResourceNode;
-                return node != null && !node.IsDepleted;
-            case TaskType.Workstation:
-                var ws = task.Owner as IWorkstation;
-                return ws != null;
-            default:
-                return task.Owner != null;
-        }
+            TaskType.Construct => task.Owner is Building b && b.CurrentState != BuildingState.Completed,
+            TaskType.Harvest => task.Owner is ResourceNode n && !n.IsDepleted,
+            TaskType.Workstation => task.Owner is IWorkstation,
+            _ => task.Owner != null
+        };
     }
 
     private void PerformWork(PostedTask task)
@@ -850,25 +731,10 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // �� ä���� �ڿ� Ȯ��
-        ResourceItemSO nodeResource = null;
-        if (node.Data?.Drops != null)
-        {
-            foreach (var drop in node.Data.Drops)
-            {
-                if (drop.Resource != null)
-                {
-                    nodeResource = drop.Resource;
-                    break;
-                }
-            }
-        }
-
-        // �� ������� ���� �ϴ��� Ȯ��
-        // ����: ��� ���� ��� �� AND �ش� ������ ���� ����
+        // 인벤토리 공간 체크
+        ResourceItemSO nodeResource = GetNodeResource(node);
         if (nodeResource != null && ShouldDepositInventory(nodeResource))
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: �κ� ������ + {nodeResource.ResourceName} ���� ���� �� ������� �̵�");
             previousTask = task;
             TaskManager.Instance?.LeaveTask(task, unit);
             taskContext.Clear();
@@ -887,18 +753,27 @@ public class UnitAi : MonoBehaviour
 
         if (node.IsDepleted)
         {
-            // �� ��� ���� �� ���� �۾� ���� (���� ���� �ٸ� ��� ã���)
             previousTask = task;
             CompleteCurrentTask();
             TryPickupPersonalItems();
         }
     }
 
-    // ==================== �۾� �Ϸ� ====================
+    private ResourceItemSO GetNodeResource(ResourceNode node)
+    {
+        if (node?.Data?.Drops == null) return null;
+        foreach (var drop in node.Data.Drops)
+        {
+            if (drop.Resource != null) return drop.Resource;
+        }
+        return null;
+    }
+
+    // ==================== Task Completion ====================
 
     private void CompleteCurrentTask()
     {
-        // �� ��ũ�����̼� ����
+        // 워크스테이션 정리
         if (currentWorkstation != null)
         {
             currentWorkstation.ReleaseWorker();
@@ -912,21 +787,16 @@ public class UnitAi : MonoBehaviour
         }
 
         taskContext.Clear();
-
         bb.CurrentTask = null;
         bb.TargetObject = null;
         bb.TargetPosition = null;
-
         pickupTimer = 0f;
 
         SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
-
-        Debug.Log($"[UnitAI] {unit.UnitName}: �۾� �Ϸ�, Idle ����");
     }
 
     private void InterruptCurrentTask()
     {
-        // �� ��ũ�����̼� ����
         if (currentWorkstation != null)
         {
             currentWorkstation.CancelWork();
@@ -943,7 +813,58 @@ public class UnitAi : MonoBehaviour
         bb.CurrentTask = null;
     }
 
-    // ==================== ������ �ݱ� ====================
+    // ==================== Item Pickup ====================
+
+    public void AddPersonalItem(DroppedItem item)
+    {
+        if (item == null || personalItems.Contains(item)) return;
+
+        // 자석 아이템은 별도 리스트로
+        if (item.EnableMagnet)
+        {
+            if (!pendingMagnetItems.Contains(item))
+            {
+                pendingMagnetItems.Add(item);
+                item.SetOwner(unit);
+            }
+            return;
+        }
+
+        personalItems.Add(item);
+        item.SetOwner(unit);
+    }
+
+    public void RemovePersonalItem(DroppedItem item)
+    {
+        if (item == null) return;
+        personalItems.Remove(item);
+        if (currentPersonalItem == item) currentPersonalItem = null;
+    }
+
+    private void TryPickupPersonalItems()
+    {
+        CleanupItemLists();
+        personalItems.RemoveAll(item => item == null || !item || item.Owner != unit || item.IsBeingMagneted);
+
+        if (personalItems.Count == 0) return;
+
+        currentPersonalItem = personalItems[0];
+        personalItems.RemoveAt(0);
+
+        if (currentPersonalItem == null || !currentPersonalItem || currentPersonalItem.IsBeingMagneted)
+        {
+            currentPersonalItem = null;
+            TryPickupPersonalItems();
+            return;
+        }
+
+        if (!currentPersonalItem.IsAnimating)
+            currentPersonalItem.Reserve(unit);
+
+        unit.MoveTo(currentPersonalItem.transform.position);
+        SetBehaviorAndPriority(AIBehaviorState.PickingUpItem, TaskPriorityLevel.ItemPickup);
+        pickupTimer = 0f;
+    }
 
     private void UpdatePickingUpItem()
     {
@@ -959,9 +880,7 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        var task = taskContext.Task;
-        var item = task.Owner as DroppedItem;
-
+        var item = taskContext.Task.Owner as DroppedItem;
         if (item == null)
         {
             CompleteCurrentTask();
@@ -986,108 +905,21 @@ public class UnitAi : MonoBehaviour
             {
                 unit.Inventory.AddItem(item.Resource, item.Amount);
                 item.PickUp(unit);
+                unit.OnItemPickedUp();
             }
             CompleteCurrentTask();
             pickupTimer = 0f;
         }
     }
 
-    // ==================== ���� ������ ====================
-
-    public void AddPersonalItem(DroppedItem item)
+    private void UpdatePickingUpPersonalItem()
     {
-        if (item == null || personalItems.Contains(item)) return;
-
-        // ★ enableMagnet 아이템은 별도 리스트로 관리
-        if (item.EnableMagnet)
-        {
-            if (!pendingMagnetItems.Contains(item))
-            {
-                pendingMagnetItems.Add(item);
-                item.SetOwner(unit);
-                Debug.Log($"[UnitAI] {unit.UnitName}: enableMagnet 아이템 → 흡수 대기 리스트 추가 ({pendingMagnetItems.Count}개)");
-            }
-            return;
-        }
-
-        personalItems.Add(item);
-        item.SetOwner(unit);
-    }
-
-    // ★ 흡수 대기 중인 자석 아이템 리스트
-    private List<DroppedItem> pendingMagnetItems = new List<DroppedItem>();
-
-    public void RemovePersonalItem(DroppedItem item)
-    {
-        if (item == null) return;
-
-        personalItems.Remove(item);
-
-        // �� Unity null üũ�� ��
-        if (currentPersonalItem != null && currentPersonalItem == item)
-            currentPersonalItem = null;
-    }
-
-    private void TryPickupPersonalItems()
-    {
-        // ★ Unity null 체크 + 흡수 중인 아이템 제외
-        if (currentPersonalItem != null && !currentPersonalItem)
-            currentPersonalItem = null;
-
-        // ★ 흡수 중인 아이템(IsBeingMagneted)도 제외
-        personalItems.RemoveAll(item =>
-            item == null ||
-            !item ||
-            item.Owner != unit ||
-            item.IsBeingMagneted);  // 흡수 중이면 줍기 대상에서 제외
-
-        if (personalItems.Count == 0)
-        {
-            return;
-        }
-
-        currentPersonalItem = personalItems[0];
-        personalItems.RemoveAt(0);
-
-        // ★ 다시 체크 (흡수 중이면 스킵)
+        // Null 체크
         if (currentPersonalItem == null || !currentPersonalItem || currentPersonalItem.IsBeingMagneted)
         {
             currentPersonalItem = null;
-            TryPickupPersonalItems();  // 재귀 호출로 다음 아이템 시도
-            return;
-        }
-
-        if (!currentPersonalItem.IsAnimating)
-            currentPersonalItem.Reserve(unit);
-
-        unit.MoveTo(currentPersonalItem.transform.position);
-        SetBehaviorAndPriority(AIBehaviorState.PickingUpItem, TaskPriorityLevel.ItemPickup);
-        pickupTimer = 0f;
-    }
-
-    private void UpdatePickingUpPersonalItem()
-    {
-        // ★ Unity null 체크 (Destroy된 오브젝트 감지)
-        if (currentPersonalItem == null || !currentPersonalItem)
-        {
-            currentPersonalItem = null;
             TryPickupPersonalItems();
-            if (currentPersonalItem == null)
-            {
-                ReturnToPreviousTaskOrIdle();
-            }
-            return;
-        }
-
-        // ★ 흡수 중인 아이템이면 스킵 (다른 곳에서 흡수 처리 중)
-        if (currentPersonalItem.IsBeingMagneted)
-        {
-            currentPersonalItem = null;
-            TryPickupPersonalItems();
-            if (currentPersonalItem == null)
-            {
-                ReturnToPreviousTaskOrIdle();
-            }
+            if (currentPersonalItem == null) ReturnToPreviousTaskOrIdle();
             return;
         }
 
@@ -1101,11 +933,11 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // ����
+        // 예약
         if (!currentPersonalItem.IsReserved)
             currentPersonalItem.Reserve(unit);
 
-        // �Ÿ� üũ
+        // 거리 체크
         float dist = Vector3.Distance(transform.position, currentPersonalItem.transform.position);
         if (dist > pickupRadius)
         {
@@ -1115,63 +947,34 @@ public class UnitAi : MonoBehaviour
             return;
         }
 
-        // �ݱ� Ÿ�̸�
+        // 줍기 타이머
         pickupTimer += Time.deltaTime;
-        if (pickupTimer < itemPickupDuration)
-            return;
+        if (pickupTimer < itemPickupDuration) return;
 
-        // === �ݱ� ���� ===
+        // 줍기 실행
         var resource = currentPersonalItem.Resource;
-        int originalAmount = currentPersonalItem.Amount;  // �� ���� �� ����
+        int originalAmount = currentPersonalItem.Amount;
 
-        // �κ��丮 ���� üũ
         if (ShouldDepositInventory(resource))
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: �κ� ������ + {resource?.ResourceName} ���� ���� �� ������� �̵�");
             GiveUpRemainingPersonalItems();
             StartDeliveryToStorage();
             return;
         }
 
-        // �κ� �ݱ�
         int pickedAmount = currentPersonalItem.PickUpPartial(unit);
         pickupTimer = 0f;
 
-        if (pickedAmount > 0)
-        {
-            Debug.Log($"[UnitAI] {unit.UnitName}: {resource?.ResourceName} x{pickedAmount}/{originalAmount} �ֿ�");
-        }
-
-        // �� �ݱ� ����� ���� �б�
-        // pickedAmount == originalAmount: ���� �ֿ� �� ���� ������
-        // pickedAmount < originalAmount && pickedAmount > 0: �κ� �ݱ� �� �������
-        // pickedAmount == 0: �� �ֿ� �� �������
+        if (pickedAmount > 0) unit.OnItemPickedUp();
 
         if (pickedAmount >= originalAmount)
         {
-            // ���� �ֿ��� �� ������ Destroy��
             currentPersonalItem = null;
-
-            // ���� ������ �õ�
             TryPickupPersonalItems();
-
-            // ���� �������� ������ ���� �۾�����
-            if (currentPersonalItem == null)
-            {
-                ReturnToPreviousTaskOrIdle();
-            }
-        }
-        else if (pickedAmount > 0)
-        {
-            // �κ� �ݱ� ���� = �κ� �� �� �� �������
-            Debug.Log($"[UnitAI] {unit.UnitName}: �κ� �ݱ� ({pickedAmount}/{originalAmount}) �� �������");
-            GiveUpRemainingPersonalItems();
-            StartDeliveryToStorage();
+            if (currentPersonalItem == null) ReturnToPreviousTaskOrIdle();
         }
         else
         {
-            // �� �ֿ� = ���� ���� �� �������
-            Debug.Log($"[UnitAI] {unit.UnitName}: ���� ��� �� �ֿ� �� �������");
             GiveUpRemainingPersonalItems();
             StartDeliveryToStorage();
         }
@@ -1179,77 +982,145 @@ public class UnitAi : MonoBehaviour
 
     private void GiveUpRemainingPersonalItems()
     {
-        // �� Unity null üũ
         if (currentPersonalItem != null && currentPersonalItem)
-        {
             currentPersonalItem.OwnerGiveUp();
-        }
         currentPersonalItem = null;
 
         foreach (var item in personalItems)
         {
-            // �� Unity null üũ
-            if (item != null && item)
-                item.OwnerGiveUp();
+            if (item != null && item) item.OwnerGiveUp();
         }
         personalItems.Clear();
     }
 
-    // ==================== â�� ��� ====================
+    // ==================== Magnet Absorption ====================
+
+    private void TryAbsorbNearbyMagnetItems()
+    {
+        magnetAbsorbTimer += Time.deltaTime;
+        if (magnetAbsorbTimer < MAGNET_ABSORB_INTERVAL) return;
+        magnetAbsorbTimer = 0f;
+
+        pendingMagnetItems.RemoveAll(item => item == null || !item);
+
+        if (unit.Inventory.IsFull) return;
+
+        var virtualSpaceMap = new Dictionary<ResourceItemSO, int>();
+        var itemsToAbsorb = new List<DroppedItem>();
+
+        for (int i = pendingMagnetItems.Count - 1; i >= 0; i--)
+        {
+            var item = pendingMagnetItems[i];
+            if (item == null || !item || item.IsBeingMagneted || item.IsAnimating)
+            {
+                if (item == null || !item || item.IsBeingMagneted)
+                    pendingMagnetItems.RemoveAt(i);
+                continue;
+            }
+
+            float dist = Vector3.Distance(transform.position, item.transform.position);
+            if (dist > magnetAbsorbRadius) continue;
+
+            var resource = item.Resource;
+            if (resource == null)
+            {
+                pendingMagnetItems.RemoveAt(i);
+                continue;
+            }
+
+            if (!virtualSpaceMap.ContainsKey(resource))
+                virtualSpaceMap[resource] = unit.Inventory.GetAvailableSpaceFor(resource);
+
+            int availableSpace = virtualSpaceMap[resource];
+            int itemAmount = item.Amount;
+
+            if (availableSpace >= itemAmount)
+            {
+                virtualSpaceMap[resource] -= itemAmount;
+                itemsToAbsorb.Add(item);
+                pendingMagnetItems.RemoveAt(i);
+            }
+        }
+
+        foreach (var item in itemsToAbsorb)
+        {
+            item.PlayAbsorbAnimation(unit, (res, amt) =>
+            {
+                unit.Inventory.AddItem(res, amt);
+                unit.OnItemPickedUp();
+            });
+        }
+    }
+
+    private bool HasAbsorbablePendingItems()
+    {
+        foreach (var item in pendingMagnetItems)
+        {
+            if (item == null || !item || item.Resource == null) continue;
+            if (unit.Inventory.GetAvailableSpaceFor(item.Resource) >= item.Amount)
+                return true;
+        }
+        return false;
+    }
+
+    private void MoveToNearestAbsorbableItem()
+    {
+        DroppedItem nearest = null;
+        float nearestDist = float.MaxValue;
+
+        foreach (var item in pendingMagnetItems)
+        {
+            if (item == null || !item || item.Resource == null) continue;
+            if (unit.Inventory.GetAvailableSpaceFor(item.Resource) < item.Amount) continue;
+
+            float dist = Vector3.Distance(transform.position, item.transform.position);
+            if (dist < nearestDist)
+            {
+                nearestDist = dist;
+                nearest = item;
+            }
+        }
+
+        if (nearest != null)
+        {
+            unit.MoveTo(nearest.transform.position);
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+        }
+    }
+
+    // ==================== Storage Delivery ====================
 
     private void StartDeliveryToStorage()
     {
-        // ����� ã�� (ĳ�� �����ϰ� ���� �˻�)
         targetStorage = FindNearestStorageDirectly();
 
         if (targetStorage == null)
         {
-            // �� ������� ������ ��� ���·� ��ȯ
-            Debug.Log($"[UnitAI] {unit.UnitName}: ����� ���� �� ��� ����");
             SetBehaviorAndPriority(AIBehaviorState.WaitingForStorage, TaskPriorityLevel.FreeWill);
             return;
         }
 
-        // ����� ���� ��ġ ���
         storagePosition = targetStorage.GetNearestAccessPoint(transform.position);
-
-        // ������� �̵� ����
         deliveryPhase = DeliveryPhase.MovingToStorage;
         depositTimer = 0f;
 
         unit.MoveTo(storagePosition);
         SetBehaviorAndPriority(AIBehaviorState.DeliveringToStorage, TaskPriorityLevel.ItemPickup);
-
-        Debug.Log($"[UnitAI] {unit.UnitName}: ������� �̵� ���� �� {targetStorage.name}");
     }
 
-    /// <summary>
-    /// �� ����� ��� ���� ������Ʈ
-    /// </summary>
     private void UpdateWaitingForStorage()
     {
-        // �ֱ������� üũ (1�ʸ���)
         if (Time.time - lastStorageCheckTime < 1f) return;
         lastStorageCheckTime = Time.time;
 
-        // �� �Ǽ� �۾� ���� ã��
-        if (TryPullConstructionTask())
-        {
-            return;
-        }
+        if (TryPullConstructionTask()) return;
 
-        // ����� �ٽ� ã��
         targetStorage = FindNearestStorageDirectly();
-
         if (targetStorage != null)
         {
-            // ����� �߰�! �� �����Ϸ� �̵�
-            Debug.Log($"[UnitAI] {unit.UnitName}: ����� �߰�! �� {targetStorage.name}");
-
             storagePosition = targetStorage.GetNearestAccessPoint(transform.position);
             deliveryPhase = DeliveryPhase.MovingToStorage;
             depositTimer = 0f;
-
             unit.MoveTo(storagePosition);
             SetBehaviorAndPriority(AIBehaviorState.DeliveringToStorage, TaskPriorityLevel.ItemPickup);
         }
@@ -1266,7 +1137,6 @@ public class UnitAi : MonoBehaviour
                 UpdateDepositing();
                 break;
             default:
-                // �߸��� ���¸� Idle��
                 ClearDeliveryState();
                 SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
                 break;
@@ -1277,28 +1147,23 @@ public class UnitAi : MonoBehaviour
     {
         if (targetStorage == null)
         {
-            // ������� ��������� ��� ����
             unit.Inventory.DepositToStorage();
+            unit.OnDeliveryComplete();
             ClearDeliveryState();
             ReturnToPreviousTaskOrIdle();
             return;
         }
 
-        // �� ����� ���� ���� �ִ��� Ȯ�� (�簢��)
         bool isInRange = targetStorage.IsInAccessArea(transform.position);
 
-        // ������� �����ߴ��� Ȯ��
         if (isInRange || unit.HasArrivedAtDestination())
         {
-            // ���� �ܰ�� ��ȯ
             deliveryPhase = DeliveryPhase.Depositing;
             depositTimer = 0f;
             unit.StopMoving();
-            Debug.Log($"[UnitAI] {unit.UnitName}: ����� ����, ���� ���� ({depositDuration}��)");
             return;
         }
 
-        // ���� �̵� �� - ��ΰ� �������� �ٽ� �õ�
         if (unit.HasArrivedAtDestination() && !isInRange)
         {
             unit.MoveTo(storagePosition);
@@ -1309,55 +1174,36 @@ public class UnitAi : MonoBehaviour
     {
         depositTimer += Time.deltaTime;
 
-        // ���� ���� �� (�ִϸ��̼� �� �߰� ����)
-        // TODO: ���� �ִϸ��̼� Ʈ����
-
         if (depositTimer >= depositDuration)
         {
-            // ���� �Ϸ�
             PerformDeposit();
+            unit.OnDeliveryComplete();
             ClearDeliveryState();
-
-            Debug.Log($"[UnitAI] {unit.UnitName}: ���� �Ϸ�!");
-
-            // ���� �۾����� �����ϰų� �� �۾� ã��
             ReturnToPreviousTaskOrIdle();
         }
     }
 
-    /// <summary>
-    /// ���� ���� ����
-    /// </summary>
     private void PerformDeposit()
     {
         if (targetStorage != null && targetStorage.IsMainStorage)
         {
-            // ���� ������� ResourceManager�� ����
             unit.Inventory.DepositToStorage();
         }
         else if (targetStorage != null)
         {
-            // �Ϲ� ������� StorageComponent�� ����
             foreach (var slot in unit.Inventory.Slots)
             {
                 if (!slot.IsEmpty)
-                {
                     targetStorage.AddItem(slot.Resource, slot.Amount);
-                }
             }
-            // �κ��丮 ���� (��� ����)
             unit.Inventory.Clear();
         }
         else
         {
-            // ������� ������ ResourceManager��
             unit.Inventory.DepositToStorage();
         }
     }
 
-    /// <summary>
-    /// ����� ��� ���� �ʱ�ȭ
-    /// </summary>
     private void ClearDeliveryState()
     {
         deliveryPhase = DeliveryPhase.None;
@@ -1365,42 +1211,30 @@ public class UnitAi : MonoBehaviour
         depositTimer = 0f;
     }
 
-    /// <summary>
-    /// 이전 작업으로 복귀하거나 새 작업 찾기 또는 Idle
-    /// </summary>
     private void ReturnToPreviousTaskOrIdle()
     {
-        // ★ 대기 중인 자석 아이템 정리
         pendingMagnetItems.RemoveAll(item => item == null || !item);
 
-        // ★ 인벤이 꽉 찼으면 바로 저장고로
+        // 인벤 꽉 차면 저장고로
         if (unit.Inventory.IsFull)
         {
-            // 대기 아이템은 유지 (저장고 갔다 와서 다시 줍기 위해)
-            Debug.Log($"[UnitAI] {unit.UnitName}: 인벤 꽉 참 → 저장고로 이동");
             StartDeliveryToStorage();
             return;
         }
 
-        // ★ 대기 중인 자석 아이템 처리
+        // 대기 자석 아이템 처리
         if (pendingMagnetItems.Count > 0)
         {
             if (HasAbsorbablePendingItems())
             {
-                // 흡수 가능한 아이템으로 이동
                 MoveToNearestAbsorbableItem();
                 return;
             }
-            else
-            {
-                // 대기 아이템은 있지만 공간 부족 → 저장고로
-                Debug.Log($"[UnitAI] {unit.UnitName}: 대기 아이템 {pendingMagnetItems.Count}개 있지만 공간 부족 → 저장고로");
-                StartDeliveryToStorage();
-                return;
-            }
+            StartDeliveryToStorage();
+            return;
         }
 
-        // 1. 이전 작업으로 복귀 시도
+        // 이전 작업 복귀
         if (previousTask != null && TaskManager.Instance != null)
         {
             var task = previousTask;
@@ -1411,153 +1245,25 @@ public class UnitAi : MonoBehaviour
                 TaskManager.Instance.TakeTask(task, unit))
             {
                 AssignTask(task);
-                Debug.Log($"[UnitAI] {unit.UnitName}: 이전 작업으로 복귀");
                 return;
             }
         }
 
-        // 2. 새 작업 찾기
-        if (TryPullTask())
-        {
-            Debug.Log($"[UnitAI] {unit.UnitName}: 새 작업 시작");
-            return;
-        }
+        // 새 작업 찾기
+        if (TryPullTask()) return;
 
-        // ★ 3. 작업 없고 인벤에 아이템 있으면 저장고로
+        // 인벤 비우기
         if (!unit.Inventory.IsEmpty && ShouldDepositWhenIdle())
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: 작업 없음 + 인벤에 아이템 있음 → 저장고로");
             StartDeliveryToStorage();
             return;
         }
 
-        // 4. 작업 없으면 Idle
         SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
     }
 
-    /// <summary>
-    /// ★ 대기 중인 아이템 중 현재 흡수 가능한 것이 있는지 체크
-    /// </summary>
-    private bool HasAbsorbablePendingItems()
-    {
-        foreach (var item in pendingMagnetItems)
-        {
-            if (item == null || !item) continue;
-            if (item.Resource == null) continue;
+    // ==================== Storage Helpers ====================
 
-            int space = unit.Inventory.GetAvailableSpaceFor(item.Resource);
-            if (space >= item.Amount)
-                return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// ★ 흡수 가능한 가장 가까운 대기 아이템으로 이동
-    /// </summary>
-    private void MoveToNearestAbsorbableItem()
-    {
-        DroppedItem nearest = null;
-        float nearestDist = float.MaxValue;
-
-        foreach (var item in pendingMagnetItems)
-        {
-            if (item == null || !item) continue;
-            if (item.Resource == null) continue;
-
-            // ★ 흡수 가능한 아이템만 대상
-            int space = unit.Inventory.GetAvailableSpaceFor(item.Resource);
-            if (space < item.Amount) continue;
-
-            float dist = Vector3.Distance(transform.position, item.transform.position);
-            if (dist < nearestDist)
-            {
-                nearestDist = dist;
-                nearest = item;
-            }
-        }
-
-        if (nearest != null)
-        {
-            Debug.Log($"[UnitAI] {unit.UnitName}: 흡수 가능 아이템으로 이동 ({nearest.Resource?.ResourceName} x{nearest.Amount}, 거리: {nearestDist:F1}m)");
-            unit.MoveTo(nearest.transform.position);
-            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
-        }
-    }
-
-    /// <summary>
-    /// ★ 가장 가까운 대기 중인 자석 아이템으로 이동 (흡수 가능 여부 무관)
-    /// </summary>
-    private void MoveToNearestPendingItem()
-    {
-        if (pendingMagnetItems.Count == 0) return;
-
-        // 가장 가까운 아이템 찾기
-        DroppedItem nearest = null;
-        float nearestDist = float.MaxValue;
-
-        foreach (var item in pendingMagnetItems)
-        {
-            if (item == null || !item) continue;
-
-            float dist = Vector3.Distance(transform.position, item.transform.position);
-            if (dist < nearestDist)
-            {
-                nearestDist = dist;
-                nearest = item;
-            }
-        }
-
-        if (nearest != null)
-        {
-            Debug.Log($"[UnitAI] {unit.UnitName}: 대기 아이템으로 이동 ({nearest.Resource?.ResourceName}, 거리: {nearestDist:F1}m)");
-            unit.MoveTo(nearest.transform.position);
-            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
-            // ★ 범위 내 들어오면 TryAbsorbNearbyMagnetItems()에서 자동 흡수됨
-        }
-    }
-
-    /// <summary>
-    /// ���� ����� ����� ã��
-    /// </summary>
-    private StorageComponent FindNearestStorage()
-    {
-        // BuildingManager�� ���� ã��
-        if (BuildingManager.Instance != null)
-        {
-            var storage = BuildingManager.Instance.GetNearestStorage(transform.position, mustHaveSpace: false);
-            if (storage != null)
-            {
-                return storage.GetComponent<StorageComponent>();
-            }
-        }
-
-        // BuildingManager�� ������ ���� ã��
-        var storages = FindObjectsOfType<StorageComponent>();
-        StorageComponent nearest = null;
-        float nearestDist = storageSearchRadius;
-
-        foreach (var storage in storages)
-        {
-            // �ϼ��� �ǹ���
-            var building = storage.GetComponent<Building>();
-            if (building != null && building.CurrentState != BuildingState.Completed)
-                continue;
-
-            float dist = Vector3.Distance(transform.position, storage.transform.position);
-            if (dist < nearestDist)
-            {
-                nearestDist = dist;
-                nearest = storage;
-            }
-        }
-
-        return nearest;
-    }
-
-    /// <summary>
-    /// �� ����� ���� �˻� (ĳ�� ��� ����)
-    /// </summary>
     private StorageComponent FindNearestStorageDirectly()
     {
         var storages = FindObjectsOfType<StorageComponent>();
@@ -1566,7 +1272,6 @@ public class UnitAi : MonoBehaviour
 
         foreach (var storage in storages)
         {
-            // �ϼ��� �ǹ��� (Building ������Ʈ�� ������ �ϼ��� ������ ����)
             var building = storage.GetComponent<Building>();
             if (building != null && building.CurrentState != BuildingState.Completed)
                 continue;
@@ -1579,111 +1284,53 @@ public class UnitAi : MonoBehaviour
             }
         }
 
-        // ĳ�� ����
         hasStorageBuilding = nearest != null;
-
         return nearest;
     }
 
-    /// <summary>
-    /// �� ������� �����ϴ��� Ȯ�� (ĳ�� ���)
-    /// </summary>
-    private bool HasAnyStorage()
+    private StorageComponent FindNearestStorage()
     {
-        // ĳ�õ� ��� ��� (5�ʸ��� ����)
-        if (Time.time - lastStorageCheckTime < STORAGE_CHECK_INTERVAL)
-        {
-            return hasStorageBuilding;
-        }
-
-        lastStorageCheckTime = Time.time;
-
-        // BuildingManager�� ���� Ȯ��
         if (BuildingManager.Instance != null)
         {
             var storage = BuildingManager.Instance.GetNearestStorage(transform.position, mustHaveSpace: false);
-            hasStorageBuilding = storage != null;
-            return hasStorageBuilding;
+            if (storage != null) return storage.GetComponent<StorageComponent>();
         }
-
-        // BuildingManager�� ������ ���� Ȯ��
-        var storages = FindObjectsOfType<StorageComponent>();
-        foreach (var storage in storages)
-        {
-            var building = storage.GetComponent<Building>();
-            if (building == null || building.CurrentState == BuildingState.Completed)
-            {
-                hasStorageBuilding = true;
-                return true;
-            }
-        }
-
-        hasStorageBuilding = false;
-        return false;
+        return FindNearestStorageDirectly();
     }
 
-    /// <summary>
-    /// �� �κ��丮�� ����� �ϴ��� Ȯ��
-    /// ����: ��� ���� ��� �� AND �ش� ������ ���� ����
-    /// </summary>
     private bool ShouldDepositInventory(ResourceItemSO resourceToAdd = null)
     {
-        // �κ��丮�� ��������� ������ �ʿ� ����
         if (unit.Inventory.IsEmpty) return false;
 
-        // ��� ������ ��� ������ Ȯ��
         bool allSlotsUsed = unit.Inventory.UsedSlots >= unit.Inventory.MaxSlots;
+        if (!allSlotsUsed) return false;
 
-        if (!allSlotsUsed)
-        {
-            // �� ������ ������ ���� �ʿ� ����
-            return false;
-        }
-
-        // ��� ������ ��� ���� ��
         if (resourceToAdd != null)
-        {
-            // �߰��Ϸ��� �������� �� ������ ������ ���� �ʿ�
             return !unit.Inventory.CanAddAny(resourceToAdd);
-        }
 
-        // �߰��Ϸ��� �������� ������ (�Ϲ� IsFull üũ)
         return unit.Inventory.IsFull;
     }
 
-    /// <summary>
-    /// ★ 작업이 없을 때 인벤토리 정리가 필요한지 확인
-    /// </summary>
     private bool ShouldDepositWhenIdle()
     {
-        // 인벤토리가 비어있으면 저장할 필요 없음
         if (unit.Inventory.IsEmpty) return false;
-
-        // 저장고가 없으면 저장 불가
         if (FindNearestStorage() == null) return false;
 
-        // 작업이 있는지 확인
         if (TaskManager.Instance != null)
         {
             var availableTask = TaskManager.Instance.FindNearestTask(unit);
             if (availableTask != null)
             {
-                // ★ 인벤 꽉 참 + 채집 작업만 있음 → 저장고로
                 if (unit.Inventory.IsFull && availableTask.Data.Type == TaskType.Harvest)
-                {
                     return true;
-                }
-                // 할 수 있는 작업이 있으면 저장 안 함
                 return false;
             }
         }
 
-        // ★ 작업이 없고 인벤에 아이템이 있으면 저장 (꽉 차지 않아도!)
         return true;
     }
 
-
-    // ==================== ���� ã�� ====================
+    // ==================== Food Seeking ====================
 
     private bool TrySeekFood()
     {
@@ -1692,7 +1339,13 @@ public class UnitAi : MonoBehaviour
 
         bb.NearestFood = food;
         bb.TargetPosition = food.transform.position;
-        unit.MoveTo(food.transform.position);
+
+        // ★ 굶주림 상태면 달리기
+        if (bb.IsStarving)
+            unit.RunTo(food.transform.position);
+        else
+            unit.MoveTo(food.transform.position);
+
         return true;
     }
 
@@ -1705,6 +1358,13 @@ public class UnitAi : MonoBehaviour
         }
 
         float dist = Vector3.Distance(transform.position, bb.NearestFood.transform.position);
+
+        // 굶주림 상태에서 멀면 계속 달리기
+        if (bb.IsStarving && dist > 3f)
+        {
+            unit.RunTo(bb.NearestFood.transform.position);
+        }
+
         if (dist < 1.5f)
         {
             var food = bb.NearestFood;
@@ -1727,8 +1387,8 @@ public class UnitAi : MonoBehaviour
 
         foreach (var item in items)
         {
-            if (!item.IsAvailable) continue;
-            if (item.Resource == null || !item.Resource.IsFood) continue;
+            if (!item.IsAvailable || item.Resource == null || !item.Resource.IsFood)
+                continue;
 
             float dist = Vector3.Distance(transform.position, item.transform.position);
             if (dist < nearestDist)
@@ -1740,7 +1400,6 @@ public class UnitAi : MonoBehaviour
         return nearest;
     }
 
-    // �� �ܺο��� ���� ��ġ ����
     public void SetFoodTarget(Vector3 foodPosition)
     {
         if (bb.Hunger > hungerSeekThreshold) return;
@@ -1750,12 +1409,28 @@ public class UnitAi : MonoBehaviour
         SetBehaviorAndPriority(AIBehaviorState.SeekingFood, TaskPriorityLevel.Survival);
     }
 
-    // ==================== �÷��̾� ���� ====================
+    // ==================== Player Command ====================
 
+    /// <summary>
+    /// 플레이어 명령 받기 (★ 충성도에 따라 무시 가능)
+    /// </summary>
     public void GiveCommand(UnitCommand command)
     {
+        // 충성도 체크 - 명령 무시 확률
+        if (bb.ShouldIgnoreCommand())
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: 명령 무시! (충성도: {bb.Loyalty:F0}, 확률: {bb.CommandIgnoreChance * 100:F0}%)");
+            bb.ReduceStress(2f);  // 반항의 쾌감
+            return;
+        }
+
         bb.HasPlayerCommand = true;
         bb.PlayerCommand = command;
+
+        // 상호작용 중이면 취소
+        if (currentBehavior == AIBehaviorState.Socializing)
+            CancelSocialInteraction();
+
         InterruptCurrentTask();
         ExecutePlayerCommand();
     }
@@ -1801,12 +1476,128 @@ public class UnitAi : MonoBehaviour
         bb.PlayerCommand = null;
     }
 
-    // ==================== ���� �ൿ ====================
+    // ==================== Free Will & Social ====================
 
+    /// <summary>
+    /// 자유 행동 - ★ 상호작용 우선, 없으면 배회
+    /// </summary>
     private void PerformFreeWill()
     {
+        // 상호작용 시도
+        if (socialInteraction != null && bb.CanSocialize)
+        {
+            if (Random.value < socialInteractionChance && TryStartSocialInteraction())
+                return;
+        }
+
+        // 배회
         if (Random.value < 0.3f)
             StartWandering();
+    }
+
+    private bool TryStartSocialInteraction()
+    {
+        var target = FindNearbyIdleUnit();
+        if (target == null) return false;
+
+        socialTarget = target;
+        float dist = Vector3.Distance(transform.position, target.transform.position);
+
+        if (dist <= socialInteraction.InteractionRadius)
+        {
+            StartSocialInteraction(target);
+            return true;
+        }
+
+        // 접근 필요
+        isApproachingForSocial = true;
+        unit.MoveTo(target.transform.position);
+        SetBehaviorAndPriority(AIBehaviorState.Socializing, TaskPriorityLevel.FreeWill);
+        return true;
+    }
+
+    private Unit FindNearbyIdleUnit()
+    {
+        var colliders = Physics.OverlapSphere(transform.position, socialSearchRadius);
+        List<Unit> candidates = new();
+
+        foreach (var col in colliders)
+        {
+            if (col.gameObject == gameObject) continue;
+
+            var otherUnit = col.GetComponent<Unit>();
+            if (otherUnit == null || !otherUnit.IsAlive) continue;
+
+            var otherBB = otherUnit.Blackboard;
+            if (otherBB == null || !otherBB.IsIdle || !otherBB.CanSocialize) continue;
+
+            var otherSocial = otherUnit.GetComponent<UnitSocialInteraction>();
+            if (otherSocial != null && otherSocial.IsInteracting) continue;
+
+            candidates.Add(otherUnit);
+        }
+
+        if (candidates.Count == 0) return null;
+        return candidates[Random.Range(0, candidates.Count)];
+    }
+
+    private void StartSocialInteraction(Unit target)
+    {
+        isApproachingForSocial = false;
+
+        if (socialInteraction != null && socialInteraction.StartInteraction(target))
+        {
+            SetBehaviorAndPriority(AIBehaviorState.Socializing, TaskPriorityLevel.FreeWill);
+        }
+        else
+        {
+            socialTarget = null;
+            SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+        }
+    }
+
+    private void UpdateSocializing()
+    {
+        // 접근 중
+        if (isApproachingForSocial)
+        {
+            if (socialTarget == null || !socialTarget.IsAlive)
+            {
+                CancelSocialInteraction();
+                return;
+            }
+
+            float dist = Vector3.Distance(transform.position, socialTarget.transform.position);
+            if (dist <= socialInteraction.InteractionRadius || unit.HasArrivedAtDestination())
+            {
+                unit.StopMoving();
+                StartSocialInteraction(socialTarget);
+            }
+            return;
+        }
+
+        // 상호작용 진행
+        if (socialInteraction != null && !socialInteraction.UpdateInteraction())
+        {
+            OnSocialInteractionComplete();
+        }
+    }
+
+    private void OnSocialInteractionComplete()
+    {
+        socialTarget = null;
+        isApproachingForSocial = false;
+        unit.GainExpFromAction(ExpGainAction.Social);
+        SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+    }
+
+    private void CancelSocialInteraction()
+    {
+        socialInteraction?.InterruptInteraction();
+        socialTarget = null;
+        isApproachingForSocial = false;
+        unit.StopMoving();
+        SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
     }
 
     private void StartWandering()
@@ -1816,7 +1607,12 @@ public class UnitAi : MonoBehaviour
 
         if (NavMesh.SamplePosition(randomPoint, out var hit, wanderRadius, NavMesh.AllAreas))
         {
-            unit.MoveTo(hit.position);
+            // ★ 느긋한 산책 스타일
+            if (movement != null)
+                movement.StrollTo(hit.position);
+            else
+                unit.MoveTo(hit.position);
+
             SetBehaviorAndPriority(AIBehaviorState.Wandering, TaskPriorityLevel.FreeWill);
         }
     }
@@ -1827,7 +1623,7 @@ public class UnitAi : MonoBehaviour
             SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
     }
 
-    // ==================== ��ƿ��Ƽ ====================
+    // ==================== Utility ====================
 
     private void SetBehaviorAndPriority(AIBehaviorState behavior, TaskPriorityLevel priority)
     {
@@ -1841,24 +1637,29 @@ public class UnitAi : MonoBehaviour
             AIBehaviorState.SeekingFood => UnitState.Eating,
             AIBehaviorState.Wandering or AIBehaviorState.ExecutingCommand => UnitState.Moving,
             AIBehaviorState.PickingUpItem or AIBehaviorState.DeliveringToStorage => UnitState.Moving,
+            AIBehaviorState.Socializing => UnitState.Socializing,
             _ => UnitState.Idle
         });
     }
 
     private void OnHungerCritical()
     {
-        Debug.Log($"[UnitAI] {unit.UnitName}: �����!");
+        Debug.Log($"[UnitAI] {unit.UnitName}: 배고파!");
     }
 
-    // ==================== ����� ====================
+    private void OnStressCritical()
+    {
+        Debug.Log($"[UnitAI] {unit.UnitName}: 스트레스 위험!");
+    }
+
+    // ==================== Gizmos ====================
 
     private void OnDrawGizmos()
     {
         if (currentBehavior != AIBehaviorState.Working && currentBehavior != AIBehaviorState.WorkingAtStation)
             return;
 
-        if (!taskContext.HasTask)
-            return;
+        if (!taskContext.HasTask) return;
 
         if (taskContext.Task?.Data?.Type == TaskType.Construct)
         {
@@ -1881,7 +1682,7 @@ public class UnitAi : MonoBehaviour
         Gizmos.DrawLine(transform.position, taskContext.WorkPosition);
     }
 
-    // ==================== ȣȯ�� ====================
+    // ==================== 호환용 ====================
 
     public void AddPlayerCommand(UnitTask task) { }
     public void AddPlayerCommandImmediate(UnitTask task) { }

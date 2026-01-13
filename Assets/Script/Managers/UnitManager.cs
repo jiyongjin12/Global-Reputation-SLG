@@ -1,47 +1,84 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 /// <summary>
-/// 유닛 관리자
-/// 유닛 생성, 추적, 관리
+/// 유닛 데이터 (관리용)
+/// </summary>
+[Serializable]
+public class UnitData
+{
+    public Unit Unit;
+    public int JoinedWeek;      // 입장 주차
+    public int JoinedDay;       // 입장 일차
+    public float JoinedTime;    // 입장 시간 (Time.time)
+
+    public UnitData(Unit unit, int week, int day)
+    {
+        Unit = unit;
+        JoinedWeek = week;
+        JoinedDay = day;
+        JoinedTime = Time.time;
+    }
+
+    /// <summary>
+    /// 활동 일수 계산
+    /// </summary>
+    public int GetActiveDays(int currentDay)
+    {
+        return Mathf.Max(0, currentDay - JoinedDay);
+    }
+}
+
+/// <summary>
+/// 유닛 중앙 관리자
+/// - 모든 유닛 리스트 관리
+/// - 생성/제거 이벤트
+/// - 타입별 필터링
+/// - UnitListUI와 연동
 /// </summary>
 public class UnitManager : MonoBehaviour
 {
     public static UnitManager Instance { get; private set; }
 
-    [Header("Unit Prefabs")]
-    [SerializeField] private GameObject workerPrefab;
-    [SerializeField] private GameObject fighterPrefab;
+    [Header("=== 유닛 프리팹 ===")]
+    [SerializeField] private GameObject unitPrefab;
 
-    [Header("Trait Database")]
-    [SerializeField] private TraitDatabaseSO traitDatabase;
+    [Header("=== 스폰 설정 ===")]
+    [SerializeField] private Transform defaultSpawnPoint;
 
-    [Header("Settings")]
-    [SerializeField] private int maxUnits = 20;
-    [SerializeField] private Transform unitContainer; // 정리용 부모 오브젝트
+    [Header("=== 디버그 ===")]
+    [SerializeField] private bool showDebugLogs = true;
 
-    // 생성된 유닛 목록
-    private List<Unit> allUnits = new List<Unit>();
-    private List<Unit> workers = new List<Unit>();
-    private List<Unit> fighters = new List<Unit>();
+    // ==================== 유닛 리스트 ====================
 
-    // Properties
+    // 전체 유닛 데이터 리스트
+    private List<UnitData> allUnits = new();
+
+    // 타입별 캐시 (빠른 조회용)
+    private Dictionary<UnitType, List<UnitData>> unitsByType = new();
+
+    // ==================== 이벤트 ====================
+
+    public event Action<Unit> OnUnitAdded;
+    public event Action<Unit> OnUnitRemoved;
+    public event Action<Unit, UnitType, UnitType> OnUnitTypeChanged;  // unit, oldType, newType
+    public event Action OnUnitsChanged;  // 유닛 목록 변경 시
+
+    // ==================== Properties ====================
+
     public int TotalUnitCount => allUnits.Count;
-    public int WorkerCount => workers.Count;
-    public int FighterCount => fighters.Count;
-    public bool CanSpawnMoreUnits => allUnits.Count < maxUnits;
-    public List<Unit> AllUnits => allUnits;
+    public IReadOnlyList<UnitData> AllUnits => allUnits;
 
-    // 이벤트
-    public event Action<Unit> OnUnitSpawned;
-    public event Action<Unit> OnUnitDied;
+    // ==================== Unity Lifecycle ====================
 
     private void Awake()
     {
         if (Instance == null)
         {
             Instance = this;
+            InitializeTypeDictionary();
         }
         else
         {
@@ -49,181 +86,400 @@ public class UnitManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 일꾼 유닛 생성
-    /// </summary>
-    public Unit SpawnWorker(Vector3 position, string name = null)
+    private void Start()
     {
-        return SpawnUnit(UnitType.Worker, position, name);
+        // 씬에 이미 있는 유닛들 등록
+        RegisterExistingUnits();
+    }
+
+    private void InitializeTypeDictionary()
+    {
+        // 모든 UnitType에 대해 빈 리스트 생성
+        foreach (UnitType type in Enum.GetValues(typeof(UnitType)))
+        {
+            unitsByType[type] = new List<UnitData>();
+        }
     }
 
     /// <summary>
-    /// 전투 유닛 생성
+    /// 씬에 이미 존재하는 유닛들 등록
     /// </summary>
-    public Unit SpawnFighter(Vector3 position, string name = null)
+    private void RegisterExistingUnits()
     {
-        return SpawnUnit(UnitType.Fighter, position, name);
+        var existingUnits = FindObjectsOfType<Unit>();
+
+        foreach (var unit in existingUnits)
+        {
+            if (unit != null && unit.IsAlive)
+            {
+                RegisterUnit(unit, GetCurrentWeek(), GetCurrentDay());
+            }
+        }
+
+        if (showDebugLogs)
+            Debug.Log($"[UnitManager] 기존 유닛 {existingUnits.Length}개 등록됨");
     }
 
+    // ==================== 유닛 생성 ====================
+
     /// <summary>
-    /// 유닛 생성
+    /// 새 유닛 생성 (기본)
     /// </summary>
-    public Unit SpawnUnit(UnitType type, Vector3 position, string name = null)
+    public Unit CreateUnit(Vector3 position, UnitType type = UnitType.Worker, string name = null)
     {
-        if (!CanSpawnMoreUnits)
+        if (unitPrefab == null)
         {
-            Debug.LogWarning("[UnitManager] Maximum unit capacity reached!");
+            Debug.LogError("[UnitManager] Unit Prefab이 설정되지 않았습니다!");
             return null;
         }
 
-        GameObject prefab = type == UnitType.Worker ? workerPrefab : fighterPrefab;
-        if (prefab == null)
-        {
-            Debug.LogError($"[UnitManager] No prefab assigned for unit type {type}!");
-            return null;
-        }
-
-        // 유닛 생성
-        GameObject unitObj = Instantiate(prefab, position, Quaternion.identity);
-        if (unitContainer != null)
-        {
-            unitObj.transform.parent = unitContainer;
-        }
-
+        GameObject unitObj = Instantiate(unitPrefab, position, Quaternion.identity);
         Unit unit = unitObj.GetComponent<Unit>();
-        if (unit == null)
+
+        if (unit != null)
         {
-            unit = unitObj.AddComponent<Unit>();
+            unit.Initialize(name, null, type);
+            RegisterUnit(unit, GetCurrentWeek(), GetCurrentDay());
+
+            if (showDebugLogs)
+                Debug.Log($"[UnitManager] 유닛 생성: {unit.UnitName} ({type})");
         }
 
-        // 랜덤 특성 부여
-        List<UnitTraitSO> traits = null;
-        if (traitDatabase != null)
-        {
-            int positiveCount = UnityEngine.Random.Range(0, 3); // 0~2개
-            int negativeCount = UnityEngine.Random.Range(0, 2); // 0~1개
-            traits = traitDatabase.GetRandomTraits(positiveCount, negativeCount);
-        }
-
-        // 초기화
-        unit.Initialize(name, traits);
-
-        // 목록에 추가
-        allUnits.Add(unit);
-        if (type == UnitType.Worker)
-            workers.Add(unit);
-        else
-            fighters.Add(unit);
-
-        // TaskManager에 등록
-        TaskManager.Instance?.RegisterUnit(unit);
-
-        // 이벤트 연결
-        unit.OnUnitDeath += HandleUnitDeath;
-
-        OnUnitSpawned?.Invoke(unit);
-
-        Debug.Log($"[UnitManager] Spawned {type} unit: {unit.UnitName}");
         return unit;
     }
 
     /// <summary>
-    /// 유닛 제거
+    /// 유닛 생성 (상세 설정)
     /// </summary>
-    public void DespawnUnit(Unit unit)
+    public Unit CreateUnit(UnitCreationData creationData)
     {
-        if (unit == null) return;
+        if (unitPrefab == null)
+        {
+            Debug.LogError("[UnitManager] Unit Prefab이 설정되지 않았습니다!");
+            return null;
+        }
 
-        allUnits.Remove(unit);
-        workers.Remove(unit);
-        fighters.Remove(unit);
+        Vector3 spawnPos = creationData.SpawnPosition ??
+                          (defaultSpawnPoint != null ? defaultSpawnPoint.position : Vector3.zero);
 
-        TaskManager.Instance?.UnregisterUnit(unit);
+        GameObject unitObj = Instantiate(unitPrefab, spawnPos, Quaternion.identity);
+        Unit unit = unitObj.GetComponent<Unit>();
 
-        Destroy(unit.gameObject);
+        if (unit != null)
+        {
+            unit.Initialize(creationData.Name, creationData.Traits, creationData.Type);
+            RegisterUnit(unit, GetCurrentWeek(), GetCurrentDay());
+
+            if (showDebugLogs)
+                Debug.Log($"[UnitManager] 유닛 생성: {unit.UnitName} ({creationData.Type})");
+        }
+
+        return unit;
+    }
+
+    /// <summary>
+    /// 스폰 포인트에서 유닛 생성
+    /// </summary>
+    public Unit CreateUnitAtSpawnPoint(UnitType type = UnitType.Worker, string name = null)
+    {
+        Vector3 spawnPos = defaultSpawnPoint != null ? defaultSpawnPoint.position : Vector3.zero;
+        return CreateUnit(spawnPos, type, name);
+    }
+
+    // ==================== 유닛 등록/해제 ====================
+
+    /// <summary>
+    /// 유닛 등록 (내부용)
+    /// </summary>
+    private void RegisterUnit(Unit unit, int week, int day)
+    {
+        // 이미 등록되어 있는지 확인
+        if (GetUnitData(unit) != null)
+        {
+            if (showDebugLogs)
+                Debug.LogWarning($"[UnitManager] 유닛 {unit.UnitName}은 이미 등록되어 있습니다.");
+            return;
+        }
+
+        UnitData data = new UnitData(unit, week, day);
+        allUnits.Add(data);
+        unitsByType[unit.Type].Add(data);
+
+        // 유닛 사망 이벤트 구독
+        unit.OnUnitDeath += OnUnitDeath;
+
+        // 이벤트 발생
+        OnUnitAdded?.Invoke(unit);
+        OnUnitsChanged?.Invoke();
+
+        // UnitListUI에 알림
+        UnitListUI.Instance?.OnUnitAdded(unit);
+    }
+
+    /// <summary>
+    /// 유닛 등록 해제
+    /// </summary>
+    public void UnregisterUnit(Unit unit)
+    {
+        UnitData data = GetUnitData(unit);
+        if (data == null) return;
+
+        allUnits.Remove(data);
+        unitsByType[unit.Type].Remove(data);
+
+        // 이벤트 구독 해제
+        unit.OnUnitDeath -= OnUnitDeath;
+
+        // 이벤트 발생
+        OnUnitRemoved?.Invoke(unit);
+        OnUnitsChanged?.Invoke();
+
+        // UnitListUI에 알림
+        UnitListUI.Instance?.OnUnitRemoved(unit);
+
+        if (showDebugLogs)
+            Debug.Log($"[UnitManager] 유닛 등록 해제: {unit.UnitName}");
+    }
+
+    /// <summary>
+    /// 유닛 사망 시 처리
+    /// </summary>
+    private void OnUnitDeath(Unit unit)
+    {
+        UnregisterUnit(unit);
+    }
+
+    // ==================== 유닛 조회 ====================
+
+    /// <summary>
+    /// 유닛 데이터 가져오기
+    /// </summary>
+    public UnitData GetUnitData(Unit unit)
+    {
+        return allUnits.FirstOrDefault(d => d.Unit == unit);
+    }
+
+    /// <summary>
+    /// 모든 유닛 가져오기
+    /// </summary>
+    public List<Unit> GetAllUnits()
+    {
+        return allUnits.Where(d => d.Unit != null && d.Unit.IsAlive)
+                       .Select(d => d.Unit)
+                       .ToList();
+    }
+
+    /// <summary>
+    /// 타입별 유닛 가져오기
+    /// </summary>
+    public List<Unit> GetUnitsByType(UnitType type)
+    {
+        if (!unitsByType.ContainsKey(type))
+            return new List<Unit>();
+
+        return unitsByType[type]
+            .Where(d => d.Unit != null && d.Unit.IsAlive)
+            .Select(d => d.Unit)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 타입별 유닛 데이터 가져오기
+    /// </summary>
+    public List<UnitData> GetUnitDataByType(UnitType type)
+    {
+        if (!unitsByType.ContainsKey(type))
+            return new List<UnitData>();
+
+        return unitsByType[type]
+            .Where(d => d.Unit != null && d.Unit.IsAlive)
+            .ToList();
+    }
+
+    /// <summary>
+    /// 타입별 유닛 수
+    /// </summary>
+    public int GetUnitCountByType(UnitType type)
+    {
+        if (!unitsByType.ContainsKey(type))
+            return 0;
+
+        return unitsByType[type].Count(d => d.Unit != null && d.Unit.IsAlive);
+    }
+
+    /// <summary>
+    /// Idle 상태인 유닛들 가져오기
+    /// </summary>
+    public List<Unit> GetIdleUnits()
+    {
+        return allUnits
+            .Where(d => d.Unit != null && d.Unit.IsAlive && d.Unit.IsIdle)
+            .Select(d => d.Unit)
+            .ToList();
     }
 
     /// <summary>
     /// 특정 위치에서 가장 가까운 유닛 찾기
     /// </summary>
-    public Unit FindNearestUnit(Vector3 position, UnitType? type = null)
+    public Unit GetNearestUnit(Vector3 position, UnitType? typeFilter = null)
     {
-        List<Unit> searchList = type switch
-        {
-            UnitType.Worker => workers,
-            UnitType.Fighter => fighters,
-            _ => allUnits
-        };
+        IEnumerable<UnitData> searchList = typeFilter.HasValue
+            ? unitsByType[typeFilter.Value]
+            : allUnits;
 
         Unit nearest = null;
         float nearestDist = float.MaxValue;
 
-        foreach (var unit in searchList)
+        foreach (var data in searchList)
         {
-            float dist = Vector3.Distance(unit.transform.position, position);
+            if (data.Unit == null || !data.Unit.IsAlive) continue;
+
+            float dist = Vector3.Distance(position, data.Unit.transform.position);
             if (dist < nearestDist)
             {
                 nearestDist = dist;
-                nearest = unit;
+                nearest = data.Unit;
             }
         }
 
         return nearest;
     }
 
-    /// <summary>
-    /// 유휴 유닛 찾기
-    /// </summary>
-    public List<Unit> GetIdleUnits(UnitType? type = null)
-    {
-        List<Unit> searchList = type switch
-        {
-            UnitType.Worker => workers,
-            UnitType.Fighter => fighters,
-            _ => allUnits
-        };
+    // ==================== 유닛 타입 변경 ====================
 
-        return searchList.FindAll(u => u.IsIdle);
+    /// <summary>
+    /// 유닛 타입 변경
+    /// </summary>
+    public void ChangeUnitType(Unit unit, UnitType newType)
+    {
+        UnitData data = GetUnitData(unit);
+        if (data == null) return;
+
+        UnitType oldType = unit.Type;
+        if (oldType == newType) return;
+
+        // 타입별 리스트에서 이동
+        unitsByType[oldType].Remove(data);
+        unitsByType[newType].Add(data);
+
+        // 유닛 타입 변경
+        unit.SetUnitType(newType);
+
+        // 이벤트 발생
+        OnUnitTypeChanged?.Invoke(unit, oldType, newType);
+        OnUnitsChanged?.Invoke();
+
+        if (showDebugLogs)
+            Debug.Log($"[UnitManager] 유닛 타입 변경: {unit.UnitName} ({oldType} → {newType})");
+    }
+
+    // ==================== 주기 시스템 연동 ====================
+
+    /// <summary>
+    /// 현재 주차 가져오기 (TimeManager 연동)
+    /// </summary>
+    public int GetCurrentWeek()
+    {
+        // TODO: TimeManager와 연동
+        // return TimeManager.Instance?.CurrentWeek ?? 1;
+        return 1;  // 임시
     }
 
     /// <summary>
-    /// 모든 유닛에게 위치로 이동 명령
+    /// 현재 일차 가져오기 (TimeManager 연동)
     /// </summary>
-    public void CommandAllUnitsMoveTo(Vector3 position)
+    public int GetCurrentDay()
     {
-        foreach (var unit in allUnits)
+        // TODO: TimeManager와 연동
+        // return TimeManager.Instance?.CurrentDay ?? 1;
+        return 1;  // 임시
+    }
+
+    /// <summary>
+    /// 유닛의 입장 주차 가져오기
+    /// </summary>
+    public int GetUnitJoinedWeek(Unit unit)
+    {
+        UnitData data = GetUnitData(unit);
+        return data?.JoinedWeek ?? 0;
+    }
+
+    /// <summary>
+    /// 유닛의 활동 일수 가져오기
+    /// </summary>
+    public int GetUnitActiveDays(Unit unit)
+    {
+        UnitData data = GetUnitData(unit);
+        return data?.GetActiveDays(GetCurrentDay()) ?? 0;
+    }
+
+    // ==================== 디버그 / 테스트 ====================
+
+    /// <summary>
+    /// 테스트용 유닛 생성
+    /// </summary>
+    [ContextMenu("Create Test Worker")]
+    public void CreateTestWorker()
+    {
+        CreateUnit(GetRandomSpawnPosition(), UnitType.Worker);
+    }
+
+    [ContextMenu("Create Test Fighter")]
+    public void CreateTestFighter()
+    {
+        CreateUnit(GetRandomSpawnPosition(), UnitType.Fighter);
+    }
+
+    private Vector3 GetRandomSpawnPosition()
+    {
+        Vector3 basePos = defaultSpawnPoint != null ? defaultSpawnPoint.position : Vector3.zero;
+        return basePos + new Vector3(
+            UnityEngine.Random.Range(-5f, 5f),
+            0,
+            UnityEngine.Random.Range(-5f, 5f)
+        );
+    }
+
+    /// <summary>
+    /// 유닛 목록 출력
+    /// </summary>
+    [ContextMenu("Print Unit List")]
+    public void PrintUnitList()
+    {
+        Debug.Log($"=== 유닛 목록 (총 {TotalUnitCount}명) ===");
+
+        foreach (UnitType type in Enum.GetValues(typeof(UnitType)))
         {
-            var moveTask = new MoveToTask(position);
-            unit.AssignTaskImmediate(moveTask);
+            int count = GetUnitCountByType(type);
+            Debug.Log($"  [{type}]: {count}명");
+
+            foreach (var data in unitsByType[type])
+            {
+                if (data.Unit != null)
+                {
+                    Debug.Log($"    - {data.Unit.UnitName} (Lv.{data.Unit.Level}, 입장: {data.JoinedWeek}주차)");
+                }
+            }
         }
     }
+}
 
-    private void HandleUnitDeath(Unit unit)
+/// <summary>
+/// 유닛 생성 데이터
+/// </summary>
+[Serializable]
+public class UnitCreationData
+{
+    public string Name;
+    public UnitType Type = UnitType.Worker;
+    public Vector3? SpawnPosition;
+    public List<UnitTraitSO> Traits;
+
+    public UnitCreationData() { }
+
+    public UnitCreationData(string name, UnitType type)
     {
-        allUnits.Remove(unit);
-        workers.Remove(unit);
-        fighters.Remove(unit);
-
-        OnUnitDied?.Invoke(unit);
-
-        Debug.Log($"[UnitManager] Unit died: {unit.UnitName}");
-    }
-
-    /// <summary>
-    /// 디버그: 유닛 상태 출력
-    /// </summary>
-    [ContextMenu("Print Unit Status")]
-    public void DebugPrintStatus()
-    {
-        Debug.Log($"[UnitManager] Total: {TotalUnitCount}/{maxUnits}, " +
-                  $"Workers: {WorkerCount}, Fighters: {FighterCount}");
-
-        foreach (var unit in allUnits)
-        {
-            Debug.Log($"  - {unit.UnitName} ({unit.Type}): " +
-                      $"HP={unit.Stats.CurrentHP:F0}, " +
-                      $"Hunger={unit.Stats.Hunger:F0}, " +
-                      $"State={unit.CurrentState}");
-        }
+        Name = name;
+        Type = type;
     }
 }

@@ -3,12 +3,18 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
+/// <summary>
+/// 유닛 타입
+/// </summary>
 public enum UnitType
 {
-    Worker,
-    Fighter
+    Worker,     // 일반 유닛: 채집 1.5배, 전투 0.75배
+    Fighter     // 전투 유닛: 전투 1.5배, 채집 0.75배
 }
 
+/// <summary>
+/// 유닛 상태
+/// </summary>
 public enum UnitState
 {
     Idle,
@@ -16,7 +22,8 @@ public enum UnitState
     Working,
     Eating,
     Fighting,
-    Fleeing
+    Fleeing,
+    Socializing
 }
 
 /// <summary>
@@ -25,83 +32,133 @@ public enum UnitState
 [RequireComponent(typeof(NavMeshAgent))]
 public class Unit : MonoBehaviour
 {
-    [Header("Basic Info")]
+    // ==================== Type Efficiency Constants ====================
+
+    private const float TYPE_BONUS = 1.5f;      // 전문 분야 보너스
+    private const float TYPE_PENALTY = 0.75f;   // 비전문 분야 페널티
+
+    // ==================== Serialized Fields ====================
+
+    [Header("=== 기본 정보 ===")]
     [SerializeField] private string unitName;
     [SerializeField] private UnitType unitType = UnitType.Worker;
 
-    [Header("Stats")]
+    [Header("=== 기본 스탯 ===")]
     [SerializeField] private float maxHP = 100f;
     [SerializeField] private float currentHP = 100f;
-    [SerializeField] private float moveSpeed = 3f;
-    [SerializeField] private float workSpeed = 1f;
-    [SerializeField] private float gatherPower = 1f;
-    [SerializeField] private float attackPower = 10f;
+    [SerializeField] private float baseAttackPower = 10f;
+    [SerializeField] private float baseGatherPower = 1f;
+    [SerializeField] private float baseWorkSpeed = 1f;
 
-    [Header("Traits")]
+    [Header("=== 이동 ===")]
+    [SerializeField] private float moveSpeed = 2f;
+    [SerializeField] private float runSpeed = 4f;
+
+    [Header("=== 레벨 ===")]
+    [SerializeField] private int level = 1;
+    [SerializeField] private float currentExp = 0f;
+    [SerializeField] private float expToNextLevel = 100f;
+
+    [Header("=== 니즈 ===")]
+    [SerializeField, Range(0, 100)] private float hunger = 100f;
+    [SerializeField, Range(0, 100)] private float loyalty = 100f;
+    [SerializeField, Range(0, 100)] private float stress = 0f;
+
+    [Header("=== 특성 ===")]
     [SerializeField] private List<UnitTraitSO> traits = new();
 
-    [Header("=== 인벤토리 (인스펙터 확인용) ===")]
-    [SerializeField] private UnitInventory inventory = new UnitInventory();
+    [Header("=== 인벤토리 ===")]
+    [SerializeField] private UnitInventory inventory = new();
 
-    // Components
+    // ==================== Components ====================
+
     private NavMeshAgent agent;
     private UnitMovement movement;
 
-    // Blackboard
+    // ==================== Blackboard ====================
+
     public UnitBlackboard Blackboard { get; private set; }
 
-    // Properties
+    // 호환성용 레거시 스탯
+    public UnitStats Stats => _legacyStats;
+    private UnitStats _legacyStats;
+
+    // ==================== Properties ====================
+
     public string UnitName => unitName;
     public UnitType Type => unitType;
     public float MaxHP => maxHP;
     public float CurrentHP => currentHP;
-    public float MoveSpeed => moveSpeed;
-    public float WorkSpeed => workSpeed;
-    public float GatherPower => gatherPower;
-    public float AttackPower => attackPower;
     public bool IsAlive => currentHP > 0;
+    public float MoveSpeed => moveSpeed;
+    public float RunSpeed => runSpeed;
+
+    // 타입별 효율이 적용된 스탯
+    public float AttackPower => CalculateAttackPower();
+    public float GatherPower => CalculateGatherPower();
+    public float WorkSpeed => baseWorkSpeed * GetTraitMultiplier(UnitStatType.WorkSpeed);
+
+    // 기본 스탯 (효율 미적용)
+    public float BaseAttackPower => baseAttackPower;
+    public float BaseGatherPower => baseGatherPower;
+    public float BaseWorkSpeed => baseWorkSpeed;
+
+    public int Level => level;
+    public float CurrentExp => currentExp;
+    public float ExpToNextLevel => expToNextLevel;
+    public float Hunger => hunger;
+    public float Loyalty => loyalty;
+    public float Stress => stress;
     public UnitInventory Inventory => inventory;
     public List<UnitTraitSO> Traits => traits;
     public NavMeshAgent Agent => agent;
-
-    // 호환성 Properties
-    public UnitStats Stats => _legacyStats;
-    private UnitStats _legacyStats;
     public bool IsIdle => Blackboard?.IsIdle ?? true;
     public bool HasTask => Blackboard?.CurrentTask != null;
     public UnitState CurrentState => Blackboard?.CurrentState ?? UnitState.Idle;
-    public UnitTask CurrentTask => null; // 기존 호환용
+    public bool IsHungry => hunger < 30f;
+    public bool IsStarving => hunger <= 0f;
+    public bool IsDisloyal => loyalty < 50f;
+    public bool IsStressed => stress >= 80f;
+    public UnitTask CurrentTask => null;
 
-    // 이벤트
+    // ==================== Events ====================
+
     public event Action<Unit> OnUnitDeath;
     public event Action<Unit, UnitState> OnStateChanged;
     public event Action<Unit, UnitTask> OnTaskCompleted;
+    public event Action<Unit, int> OnLevelUp;
+
+    // ==================== Unity Methods ====================
 
     private void Awake()
     {
         agent = GetComponent<NavMeshAgent>();
         movement = GetComponent<UnitMovement>();
         Blackboard = new UnitBlackboard();
-
-        // 호환성용 UnitStats 생성
         _legacyStats = new UnitStats();
     }
 
-    private void Start()
-    {
-        Initialize();
-    }
+    private void Start() => Initialize();
 
-    public void Initialize(string name = null, List<UnitTraitSO> initialTraits = null)
+    // ==================== Initialize ====================
+
+    public void Initialize(string name = null, List<UnitTraitSO> initialTraits = null, UnitType? type = null)
     {
-        if (!string.IsNullOrEmpty(name))
-            unitName = name;
-        else if (string.IsNullOrEmpty(unitName))
-            unitName = $"Unit_{UnityEngine.Random.Range(1000, 9999)}";
+        unitName = !string.IsNullOrEmpty(name) ? name :
+                   string.IsNullOrEmpty(unitName) ? $"Unit_{UnityEngine.Random.Range(1000, 9999)}" : unitName;
+
+        if (type.HasValue)
+            unitType = type.Value;
 
         currentHP = maxHP;
-        inventory.Initialize(5, 5);  // ★ 5칸, 아이템당 최대 5개 스택
+        hunger = loyalty = 100f;
+        stress = currentExp = 0f;
+        level = 1;
+        expToNextLevel = 100f;
+
+        inventory.Initialize(5, 5);
         Blackboard.Reset();
+        SyncToBlackboard();
 
         _legacyStats.Initialize(maxHP);
 
@@ -111,53 +168,111 @@ public class Unit : MonoBehaviour
         ApplyTraits();
         agent.speed = moveSpeed;
 
-        // Blackboard 이벤트 연결
-        Blackboard.OnStateChanged += (state) => OnStateChanged?.Invoke(this, state);
+        Blackboard.OnStateChanged += state => OnStateChanged?.Invoke(this, state);
+        Blackboard.OnLevelUp += lvl => { level = lvl; OnLevelUp?.Invoke(this, lvl); OnLevelUpInternal(lvl); };
+
+        Debug.Log($"[Unit] {unitName} 초기화 완료 - 타입: {unitType}, 채집력: {GatherPower:F2}, 공격력: {AttackPower:F2}");
     }
 
-    // ==================== 이동 ====================
+    private void SyncToBlackboard()
+    {
+        Blackboard.Hunger = hunger;
+        Blackboard.Loyalty = loyalty;
+        Blackboard.Stress = stress;
+        Blackboard.Level = level;
+        Blackboard.CurrentExp = currentExp;
+        Blackboard.ExpToNextLevel = expToNextLevel;
+    }
+
+    // ==================== Type Efficiency ====================
+
+    /// <summary>
+    /// 타입별 채집 효율 계산
+    /// Worker: 1.5배, Fighter: 0.75배
+    /// </summary>
+    private float GetGatherEfficiency()
+    {
+        return unitType switch
+        {
+            UnitType.Worker => TYPE_BONUS,
+            UnitType.Fighter => TYPE_PENALTY,
+            _ => 1f
+        };
+    }
+
+    /// <summary>
+    /// 타입별 전투 효율 계산
+    /// Fighter: 1.5배, Worker: 0.75배
+    /// </summary>
+    private float GetCombatEfficiency()
+    {
+        return unitType switch
+        {
+            UnitType.Fighter => TYPE_BONUS,
+            UnitType.Worker => TYPE_PENALTY,
+            _ => 1f
+        };
+    }
+
+    /// <summary>
+    /// 최종 공격력 계산 (타입 효율 + 특성)
+    /// </summary>
+    private float CalculateAttackPower()
+    {
+        return baseAttackPower * GetCombatEfficiency() * GetTraitMultiplier(UnitStatType.AttackPower);
+    }
+
+    /// <summary>
+    /// 최종 채집력 계산 (타입 효율 + 특성, 노드 타입 무관)
+    /// </summary>
+    private float CalculateGatherPower()
+    {
+        return baseGatherPower * GetGatherEfficiency() * GetTraitMultiplier(UnitStatType.GatherPower);
+    }
+
+    // ==================== Movement ====================
 
     public void MoveTo(Vector3 destination)
     {
         Blackboard.TargetPosition = destination;
+        agent.speed = moveSpeed;
+        if (movement != null) movement.MoveTo(destination, MovementStyle.Natural);
+        else agent.SetDestination(destination);
+    }
 
-        if (movement != null)
-            movement.MoveTo(destination, MovementStyle.Natural);
-        else
-            agent.SetDestination(destination);
+    public void RunTo(Vector3 destination)
+    {
+        Blackboard.TargetPosition = destination;
+        agent.speed = runSpeed;
+        if (movement != null) movement.MoveTo(destination, MovementStyle.Urgent);
+        else agent.SetDestination(destination);
     }
 
     public void StopMoving()
     {
         Blackboard.TargetPosition = null;
-
-        if (movement != null)
-            movement.Stop();
-        else
-            agent.ResetPath();
+        if (movement != null) movement.Stop();
+        else agent.ResetPath();
+        agent.speed = moveSpeed;
     }
 
     public bool HasArrivedAtDestination()
     {
         if (agent.pathPending) return false;
-        if (agent.remainingDistance <= agent.stoppingDistance)
-        {
-            if (!agent.hasPath || agent.velocity.sqrMagnitude < 0.1f)
-                return true;
-        }
-        return false;
+        return agent.remainingDistance <= agent.stoppingDistance &&
+               (!agent.hasPath || agent.velocity.sqrMagnitude < 0.1f);
     }
 
-    // ==================== 체력 ====================
+    public bool IsInDanger() => IsStarving || Blackboard.CurrentState == UnitState.Fleeing;
+
+    // ==================== HP ====================
 
     public void TakeDamage(float damage)
     {
-        float oldHP = currentHP;
+        float old = currentHP;
         currentHP = Mathf.Max(0, currentHP - damage);
         _legacyStats.TakeDamage(damage);
-
-        if (currentHP <= 0 && oldHP > 0)
-            Die();
+        if (currentHP <= 0 && old > 0) Die();
     }
 
     public void Heal(float amount)
@@ -168,6 +283,7 @@ public class Unit : MonoBehaviour
 
     public void Eat(float nutritionValue)
     {
+        hunger = Mathf.Min(100f, hunger + nutritionValue);
         Blackboard.Eat(nutritionValue);
         _legacyStats.Eat(nutritionValue);
     }
@@ -180,25 +296,137 @@ public class Unit : MonoBehaviour
         Destroy(gameObject);
     }
 
-    // ==================== 작업 ====================
+    // ==================== Needs ====================
 
+    public void DecreaseHunger(float amount)
+    {
+        hunger = Mathf.Max(0, hunger - amount);
+        Blackboard.DecreaseHunger(amount);
+        if (hunger <= 0) TakeDamage(amount * 0.5f);
+    }
+
+    public void ModifyLoyalty(float amount)
+    {
+        loyalty = Mathf.Clamp(loyalty + amount, 0f, 100f);
+        Blackboard.ModifyLoyalty(amount);
+    }
+
+    public void ModifyStress(float amount)
+    {
+        stress = Mathf.Clamp(stress + amount, 0f, 100f);
+        Blackboard.ModifyStress(amount);
+    }
+
+    public void ReduceStress(float amount) => ModifyStress(-Mathf.Abs(amount));
+    public void IncreaseStress(float amount) => ModifyStress(Mathf.Abs(amount));
+
+    // ==================== Experience ====================
+
+    public void GainExp(float amount)
+    {
+        if (amount <= 0) return;
+        currentExp += amount;
+        Blackboard.CurrentExp = currentExp;
+        while (currentExp >= expToNextLevel)
+        {
+            currentExp -= expToNextLevel;
+            LevelUp();
+        }
+    }
+
+    public void GainExpFromAction(ExpGainAction action, float multiplier = 1f)
+    {
+        float baseExp = action switch { ExpGainAction.Combat => 2f, ExpGainAction.Social => 0.5f, _ => 1f };
+        GainExp(baseExp * multiplier);
+    }
+
+    private void LevelUp()
+    {
+        level++;
+        Blackboard.Level = level;
+        Blackboard.CurrentExp = currentExp;
+        OnLevelUp?.Invoke(this, level);
+        OnLevelUpInternal(level);
+    }
+
+    private void OnLevelUpInternal(int newLevel) => inventory.SetSlotsByLevel(newLevel, 1);
+
+    // ==================== Work & Combat ====================
+
+    /// <summary>
+    /// 건설 작업 수행 (타입 효율 적용 안함, 특성만 적용)
+    /// </summary>
     public float DoWork()
     {
         Blackboard.LastWorkedTime = Time.time;
-        return workSpeed * GetTraitMultiplier(UnitStatType.WorkSpeed);
+        GainExpFromAction(ExpGainAction.Construct);
+        return baseWorkSpeed * GetTraitMultiplier(UnitStatType.WorkSpeed);
     }
 
+    /// <summary>
+    /// 자원 채집 (타입 효율 + 특성 + 노드 타입 보너스)
+    /// Worker: 기본 1.5배
+    /// 특성 예: 나무꾼이 나무 채집 시 추가 보너스
+    /// </summary>
     public float DoGather(ResourceNodeType? nodeType = null)
     {
-        return gatherPower * GetTraitMultiplier(UnitStatType.GatherPower, nodeType);
+        GainExpFromAction(ExpGainAction.Harvest);
+
+        // 기본 채집력 * 타입 효율 * 일반 특성 * 노드별 특성
+        float result = baseGatherPower;
+        result *= GetGatherEfficiency();
+        result *= GetTraitMultiplier(UnitStatType.GatherPower);
+
+        if (nodeType.HasValue)
+            result *= GetTraitMultiplier(UnitStatType.GatherPower, nodeType);
+
+        return result;
     }
 
-    // ==================== 호환성 메서드 ====================
+    /// <summary>
+    /// 전투 데미지 계산 (타입 효율 + 특성)
+    /// Fighter: 기본 1.5배
+    /// </summary>
+    public float DoAttack()
+    {
+        GainExpFromAction(ExpGainAction.Combat);
+        return baseAttackPower * GetCombatEfficiency() * GetTraitMultiplier(UnitStatType.AttackPower);
+    }
 
-    public void AssignTask(UnitTask task) { }
-    public void AssignTaskImmediate(UnitTask task) { }
+    /// <summary>
+    /// 특정 대상에게 공격 (향후 전투 시스템용)
+    /// </summary>
+    public float DoAttack(GameObject target)
+    {
+        float damage = DoAttack();
 
-    // ==================== 특성 ====================
+        // 사냥꾼 특성: 동물에게 추가 데미지 (향후 구현)
+        // if (target.CompareTag("Animal"))
+        //     damage *= GetTraitMultiplier(UnitStatType.AttackPower, targetType);
+
+        Debug.Log($"[Unit] {unitName} 공격! 데미지: {damage:F1} (타입: {unitType})");
+        return damage;
+    }
+
+    /// <summary>
+    /// 받는 데미지 계산 (방어력 특성 적용)
+    /// </summary>
+    public float CalculateIncomingDamage(float rawDamage)
+    {
+        // Defender 특성 등 적용
+        float defenseMultiplier = GetTraitMultiplier(UnitStatType.MaxHP); // 임시로 MaxHP 사용
+        return rawDamage * defenseMultiplier;
+    }
+
+    public void OnItemPickedUp() => GainExpFromAction(ExpGainAction.PickupItem);
+    public void OnDeliveryComplete() => GainExpFromAction(ExpGainAction.Deliver);
+
+    // ==================== Command ====================
+
+    public bool ShouldIgnoreCommand() => Blackboard.ShouldIgnoreCommand();
+    public float GetCommandIgnoreChance() => Blackboard.CommandIgnoreChance;
+
+    // ==================== Traits ====================
 
     private void ApplyTraits()
     {
@@ -206,8 +434,11 @@ public class Unit : MonoBehaviour
         {
             foreach (var effect in trait.Effects)
             {
+                // 조건 없는 효과만 영구 적용 (이동 속도 등)
                 if (!effect.HasNodeTypeCondition)
+                {
                     ApplyStatModifier(effect.AffectedStat, effect.Multiplier);
+                }
             }
         }
         agent.speed = moveSpeed;
@@ -217,46 +448,121 @@ public class Unit : MonoBehaviour
     {
         switch (stat)
         {
-            case UnitStatType.MoveSpeed:
-                moveSpeed *= multiplier;
-                break;
-            case UnitStatType.WorkSpeed:
-                workSpeed *= multiplier;
-                break;
-            case UnitStatType.GatherPower:
-                gatherPower *= multiplier;
-                break;
-            case UnitStatType.AttackPower:
-                attackPower *= multiplier;
-                break;
+            case UnitStatType.MoveSpeed: moveSpeed *= multiplier; break;
+                // WorkSpeed, GatherPower, AttackPower는 실시간 계산
         }
     }
 
+    /// <summary>
+    /// 특성 배율 계산 (노드 타입 조건 포함)
+    /// </summary>
     public float GetTraitMultiplier(UnitStatType statType, ResourceNodeType? nodeType = null)
     {
         float multiplier = 1f;
+
         foreach (var trait in traits)
         {
             foreach (var effect in trait.Effects)
             {
-                if (effect.AffectedStat == statType)
+                if (effect.AffectedStat != statType) continue;
+
+                // 조건 없는 효과
+                if (!effect.HasNodeTypeCondition)
                 {
-                    if (!effect.HasNodeTypeCondition || effect.TargetNodeType == nodeType)
-                        multiplier *= effect.Multiplier;
+                    multiplier *= effect.Multiplier;
+                }
+                // 노드 타입 조건이 있고, 해당 노드 타입과 일치
+                else if (nodeType.HasValue && effect.TargetNodeType == nodeType.Value)
+                {
+                    multiplier *= effect.Multiplier;
                 }
             }
         }
+
         return multiplier;
     }
 
-    // ==================== 레벨 시스템 (확장용) ====================
+    /// <summary>
+    /// 특성 추가
+    /// </summary>
+    public void AddTrait(UnitTraitSO trait)
+    {
+        if (trait == null || traits.Contains(trait)) return;
+
+        traits.Add(trait);
+
+        // 즉시 적용되는 효과만 적용
+        foreach (var effect in trait.Effects)
+        {
+            if (!effect.HasNodeTypeCondition)
+                ApplyStatModifier(effect.AffectedStat, effect.Multiplier);
+        }
+
+        Debug.Log($"[Unit] {unitName}: 특성 '{trait.TraitName}' 추가됨");
+    }
 
     /// <summary>
-    /// 레벨업 시 인벤토리 확장
+    /// 특성 제거
     /// </summary>
-    public void OnLevelUp(int newLevel)
+    public void RemoveTrait(UnitTraitSO trait)
     {
-        // 레벨당 1칸씩 증가 (예시)
-        inventory.SetSlotsByLevel(newLevel, 1);
+        if (trait == null || !traits.Contains(trait)) return;
+
+        // 역으로 효과 제거
+        foreach (var effect in trait.Effects)
+        {
+            if (!effect.HasNodeTypeCondition && effect.Multiplier != 0)
+                ApplyStatModifier(effect.AffectedStat, 1f / effect.Multiplier);
+        }
+
+        traits.Remove(trait);
+        Debug.Log($"[Unit] {unitName}: 특성 '{trait.TraitName}' 제거됨");
     }
+
+    /// <summary>
+    /// 특정 특성 보유 여부
+    /// </summary>
+    public bool HasTrait(TraitType traitType)
+    {
+        foreach (var trait in traits)
+        {
+            if (trait.Type == traitType)
+                return true;
+        }
+        return false;
+    }
+
+    // ==================== Type Change ====================
+
+    /// <summary>
+    /// 유닛 타입 변경 (직업 전환)
+    /// </summary>
+    public void SetUnitType(UnitType newType)
+    {
+        if (unitType == newType) return;
+
+        UnitType oldType = unitType;
+        unitType = newType;
+
+        Debug.Log($"[Unit] {unitName}: 타입 변경 {oldType} → {newType}");
+        Debug.Log($"[Unit] 새 스탯 - 채집력: {GatherPower:F2}, 공격력: {AttackPower:F2}");
+    }
+
+    // ==================== Utility ====================
+
+    public string GetStatusString() =>
+        $"[{unitType}] Lv.{level} HP:{currentHP:F0}/{maxHP:F0} 채집:{GatherPower:F1} 공격:{AttackPower:F1}";
+
+    public string GetDetailedStatus() =>
+        $"=== {unitName} ({unitType}) ===\n" +
+        $"레벨: {level} (EXP: {currentExp:F0}/{expToNextLevel:F0})\n" +
+        $"HP: {currentHP:F0}/{maxHP:F0}\n" +
+        $"배고픔: {hunger:F0} | 충성도: {loyalty:F0} | 스트레스: {stress:F0}\n" +
+        $"채집력: {GatherPower:F2} (기본 {baseGatherPower} × {GetGatherEfficiency():F2})\n" +
+        $"공격력: {AttackPower:F2} (기본 {baseAttackPower} × {GetCombatEfficiency():F2})\n" +
+        $"특성: {traits.Count}개";
+
+    // 호환용
+    public void AssignTask(UnitTask task) { }
+    public void AssignTaskImmediate(UnitTask task) { }
 }

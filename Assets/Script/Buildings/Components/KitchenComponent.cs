@@ -75,7 +75,7 @@ public class KitchenComponent : ProducerComponent
             hungryUnits = hungryUnits.OrderBy(u => u.Blackboard?.Hunger ?? 100f).ToList();
 
             Unit mostHungry = hungryUnits[0];
-            var ai = mostHungry.GetComponent<UnitAi>();
+            var ai = mostHungry.GetComponent<UnitAI>();  // ★ 수정: UnitAi → UnitAI
             ai?.SetFoodTarget(building.DropPoint.position);
 
             Debug.Log($"[Kitchen] 음식 완성! 굶주린 {mostHungry.UnitName}에게 알림");

@@ -10,7 +10,8 @@ public enum GameAction
     // UI 관련
     OpenChat,           // 채팅 열기 (Enter)
     OpenBuilding,       // 건물UI 열기/닫기 (B)
-    OpenInventory,      // ★ 인벤토리 열기/닫기 (I)
+    OpenInventory,      // 인벤토리 열기/닫기 (I)
+    OpenUnitList,       // ★ 유닛 목록 열기/닫기 (Tab)
     CloseUI,            // UI 닫기 / 취소 (ESC)
     OpenSettings,       // 설정 열기
 
@@ -55,7 +56,8 @@ public class GameInputManager : MonoBehaviour
     {
         { GameAction.OpenChat, KeyCode.Return },
         { GameAction.OpenBuilding, KeyCode.B },
-        { GameAction.OpenInventory, KeyCode.I },        // 추가
+        { GameAction.OpenInventory, KeyCode.I },
+        { GameAction.OpenUnitList, KeyCode.Tab },      // ★ 추가
         { GameAction.CloseUI, KeyCode.Escape },
         { GameAction.OpenSettings, KeyCode.Escape },
         { GameAction.MoveBuilding, KeyCode.C },
@@ -324,6 +326,7 @@ public class GameInputManager : MonoBehaviour
             KeyCode.KeypadEnter => "Enter (Numpad)",
             KeyCode.Escape => "ESC",
             KeyCode.Space => "Space",
+            KeyCode.Tab => "Tab",
             KeyCode.LeftShift => "L-Shift",
             KeyCode.RightShift => "R-Shift",
             KeyCode.LeftControl => "L-Ctrl",

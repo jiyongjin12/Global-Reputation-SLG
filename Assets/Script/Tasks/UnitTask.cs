@@ -372,7 +372,7 @@ public class EatFoodTask : UnitTask
 
                 Debug.Log($"[EatFoodTask] {unit.UnitName} 음식 먹음! 영양: {nutrition}");
 
-                var ai = unit.GetComponent<UnitAi>();
+                var ai = unit.GetComponent<UnitAI>();
                 ai?.OnFoodEaten(nutrition);
             }
 

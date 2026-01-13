@@ -14,6 +14,12 @@ public class UnitBlackboard
     // 니즈
     [Range(0, 100)] public float Hunger = 100f;
     [Range(0, 100)] public float Loyalty = 100f;
+    [Range(0, 100)] public float Stress = 0f;
+
+    // 레벨
+    public int Level = 1;
+    public float CurrentExp = 0f;
+    public float ExpToNextLevel = 100f;
 
     // 현재 목표
     public Vector3? TargetPosition;
@@ -27,20 +33,36 @@ public class UnitBlackboard
     // 감지된 정보
     public DroppedItem NearestFood;
 
+    // 사회적 상호작용
+    public Unit InteractionTarget;
+    public float LastSocialInteractionTime = -100f;
+    public float SocialCooldown = 30f;
+
     // 타이머
     public float LastAteTime;
     public float LastWorkedTime;
 
-    // 이벤트
+    // Events
     public event Action OnHungerCritical;
     public event Action OnLoyaltyCritical;
+    public event Action OnStressCritical;
+    public event Action<int> OnLevelUp;
     public event Action<UnitState> OnStateChanged;
 
-    // 상태 체크
+    // Properties
     public bool IsHungry => Hunger < 30f;
     public bool IsStarving => Hunger <= 0f;
-    public bool IsDisloyal => Loyalty < 20f;
+    public bool IsDisloyal => Loyalty < 50f;
+    public bool IsStressed => Stress >= 80f;
     public bool IsIdle => CurrentState == UnitState.Idle && CurrentTask == null && !HasPlayerCommand;
+    public bool CanSocialize => Time.time - LastSocialInteractionTime >= SocialCooldown;
+
+    /// <summary>
+    /// 명령 무시 확률 (50 이상: 0%, 49: 10%, 0: 25%)
+    /// </summary>
+    public float CommandIgnoreChance => Loyalty >= 50f ? 0f : 0.10f + ((49f - Loyalty) / 49f) * 0.15f;
+
+    public bool ShouldIgnoreCommand() => Loyalty < 50f && UnityEngine.Random.value < CommandIgnoreChance;
 
     public void SetState(UnitState newState)
     {
@@ -53,11 +75,9 @@ public class UnitBlackboard
 
     public void DecreaseHunger(float amount)
     {
-        float oldHunger = Hunger;
+        float old = Hunger;
         Hunger = Mathf.Max(0, Hunger - amount);
-
-        if (Hunger < 30f && oldHunger >= 30f)
-            OnHungerCritical?.Invoke();
+        if (Hunger < 30f && old >= 30f) OnHungerCritical?.Invoke();
     }
 
     public void Eat(float nutrition)
@@ -68,24 +88,56 @@ public class UnitBlackboard
 
     public void ModifyLoyalty(float amount)
     {
-        float oldLoyalty = Loyalty;
+        float old = Loyalty;
         Loyalty = Mathf.Clamp(Loyalty + amount, 0f, 100f);
-
-        if (Loyalty < 20f && oldLoyalty >= 20f)
-            OnLoyaltyCritical?.Invoke();
+        if (Loyalty < 50f && old >= 50f) OnLoyaltyCritical?.Invoke();
     }
+
+    public void ModifyStress(float amount)
+    {
+        float old = Stress;
+        Stress = Mathf.Clamp(Stress + amount, 0f, 100f);
+        if (Stress >= 80f && old < 80f) OnStressCritical?.Invoke();
+    }
+
+    public void ReduceStress(float amount) => ModifyStress(-Mathf.Abs(amount));
+    public void IncreaseStress(float amount) => ModifyStress(Mathf.Abs(amount));
+
+    public void GainExp(float amount)
+    {
+        if (amount <= 0) return;
+        CurrentExp += amount;
+        while (CurrentExp >= ExpToNextLevel)
+        {
+            CurrentExp -= ExpToNextLevel;
+            Level++;
+            OnLevelUp?.Invoke(Level);
+        }
+    }
+
+    public void StartSocialInteraction(Unit target)
+    {
+        InteractionTarget = target;
+        LastSocialInteractionTime = Time.time;
+    }
+
+    public void EndSocialInteraction() => InteractionTarget = null;
 
     public void Reset()
     {
         IsAlive = true;
         CurrentState = UnitState.Idle;
-        Hunger = 100f;
-        Loyalty = 100f;
+        Hunger = Loyalty = 100f;
+        Stress = CurrentExp = 0f;
+        Level = 1;
+        ExpToNextLevel = 100f;
         TargetPosition = null;
         TargetObject = null;
         CurrentTask = null;
         HasPlayerCommand = false;
         PlayerCommand = null;
+        InteractionTarget = null;
+        LastSocialInteractionTime = -100f;
     }
 }
 
@@ -106,11 +158,4 @@ public class UnitCommand
     }
 }
 
-public enum UnitCommandType
-{
-    MoveTo,
-    Attack,
-    Construct,
-    Harvest,
-    Stop
-}
+public enum UnitCommandType { MoveTo, Attack, Construct, Harvest, Stop }

@@ -6,14 +6,16 @@ using UnityEngine;
 /// </summary>
 public enum UnitStatType
 {
-    HP,
-    MaxHP,
-    Hunger,         // 배고픔 (0~100, 0이면 굶주림)
-    Loyalty,        // 충성심 (0~100)
-    MoveSpeed,
-    WorkSpeed,      // 작업 속도 배율
-    AttackPower,
-    GatherPower     // 채집 효율 배율
+    HP, MaxHP, Hunger, Loyalty, Stress,
+    MoveSpeed, WorkSpeed, AttackPower, GatherPower
+}
+
+/// <summary>
+/// 경험치 획득 행동 타입
+/// </summary>
+public enum ExpGainAction
+{
+    Harvest, Construct, PickupItem, Deliver, Combat, Craft, Social
 }
 
 /// <summary>
@@ -22,25 +24,33 @@ public enum UnitStatType
 [Serializable]
 public class UnitStats
 {
-    [Header("Base Stats")]
+    [Header("=== 기본 스탯 ===")]
     [SerializeField] private float maxHP = 100f;
     [SerializeField] private float currentHP = 100f;
-    [SerializeField] private float hunger = 100f;      // 100 = 배부름, 0 = 굶주림
-    [SerializeField] private float loyalty = 100f;     // 100 = 충성, 0 = 반란 가능
+    [SerializeField] private float hunger = 100f;
+    [SerializeField] private float loyalty = 100f;
 
-    [Header("Work Stats")]
-    [SerializeField] private float moveSpeed = 3f;
-    [SerializeField] private float workSpeed = 1f;     // 작업 속도 배율
-    [SerializeField] private float gatherPower = 1f;   // 채집 효율
+    [Header("=== 레벨 시스템 ===")]
+    [SerializeField] private int level = 1;
+    [SerializeField] private float currentExp = 0f;
+    [SerializeField] private float expToNextLevel = 100f;
 
-    [Header("Combat Stats")]
+    [Header("=== 스트레스 ===")]
+    [SerializeField] private float stress = 0f;
+
+    [Header("=== 능력치 ===")]
+    [SerializeField] private float moveSpeed = 2f;
+    [SerializeField] private float workSpeed = 1f;
+    [SerializeField] private float gatherPower = 1f;
     [SerializeField] private float attackPower = 10f;
 
-    // 이벤트
+    // Events
     public event Action OnDeath;
-    public event Action<UnitStatType, float, float> OnStatChanged; // (type, oldVal, newVal)
-    public event Action OnHungerCritical;  // 배고픔이 위험 수준
-    public event Action OnLoyaltyCritical; // 충성심이 위험 수준
+    public event Action<UnitStatType, float, float> OnStatChanged;
+    public event Action OnHungerCritical;
+    public event Action OnLoyaltyCritical;
+    public event Action<int> OnLevelUp;
+    public event Action OnStressCritical;
 
     // Properties
     public float MaxHP => maxHP;
@@ -48,6 +58,11 @@ public class UnitStats
     public float HPPercent => maxHP > 0 ? currentHP / maxHP : 0f;
     public float Hunger => hunger;
     public float Loyalty => loyalty;
+    public float Stress => stress;
+    public int Level => level;
+    public float CurrentExp => currentExp;
+    public float ExpToNextLevel => expToNextLevel;
+    public float ExpPercent => expToNextLevel > 0 ? currentExp / expToNextLevel : 0f;
     public float MoveSpeed => moveSpeed;
     public float WorkSpeed => workSpeed;
     public float GatherPower => gatherPower;
@@ -56,109 +71,102 @@ public class UnitStats
     public bool IsAlive => currentHP > 0;
     public bool IsHungry => hunger < 30f;
     public bool IsStarving => hunger <= 0f;
-    public bool IsDisloyal => loyalty < 20f;
+    public bool IsDisloyal => loyalty < 50f;
+    public bool IsStressed => stress >= 80f;
 
     /// <summary>
-    /// 스탯 초기화
+    /// 명령 무시 확률 (50 이상: 0%, 49: 10%, 0: 25%)
     /// </summary>
+    public float CommandIgnoreChance => loyalty >= 50f ? 0f : 0.10f + ((49f - loyalty) / 49f) * 0.15f;
+
+    public bool ShouldIgnoreCommand() => loyalty < 50f && UnityEngine.Random.value < CommandIgnoreChance;
+
     public void Initialize(float baseMaxHP = 100f)
     {
         maxHP = baseMaxHP;
         currentHP = maxHP;
-        hunger = 100f;
-        loyalty = 100f;
+        hunger = loyalty = 100f;
+        stress = currentExp = 0f;
+        level = 1;
+        expToNextLevel = 100f;
     }
 
-    /// <summary>
-    /// 데미지 받기
-    /// </summary>
     public void TakeDamage(float damage)
     {
-        float oldHP = currentHP;
+        float old = currentHP;
         currentHP = Mathf.Max(0, currentHP - damage);
-        OnStatChanged?.Invoke(UnitStatType.HP, oldHP, currentHP);
-
-        if (currentHP <= 0)
-        {
-            OnDeath?.Invoke();
-        }
+        OnStatChanged?.Invoke(UnitStatType.HP, old, currentHP);
+        if (currentHP <= 0 && old > 0) OnDeath?.Invoke();
     }
 
-    /// <summary>
-    /// 체력 회복
-    /// </summary>
     public void Heal(float amount)
     {
-        float oldHP = currentHP;
+        float old = currentHP;
         currentHP = Mathf.Min(maxHP, currentHP + amount);
-        OnStatChanged?.Invoke(UnitStatType.HP, oldHP, currentHP);
+        OnStatChanged?.Invoke(UnitStatType.HP, old, currentHP);
     }
 
-    /// <summary>
-    /// 배고픔 감소 (시간에 따라 호출)
-    /// </summary>
     public void DecreaseHunger(float amount)
     {
-        float oldHunger = hunger;
+        float old = hunger;
         hunger = Mathf.Max(0, hunger - amount);
-        OnStatChanged?.Invoke(UnitStatType.Hunger, oldHunger, hunger);
-
-        if (hunger < 30f && oldHunger >= 30f)
-        {
-            OnHungerCritical?.Invoke();
-        }
-
-        // 굶주리면 체력도 감소
-        if (hunger <= 0)
-        {
-            TakeDamage(amount * 0.5f);
-        }
+        OnStatChanged?.Invoke(UnitStatType.Hunger, old, hunger);
+        if (hunger < 30f && old >= 30f) OnHungerCritical?.Invoke();
+        if (hunger <= 0) TakeDamage(amount * 0.5f);
     }
 
-    /// <summary>
-    /// 음식 먹기
-    /// </summary>
     public void Eat(float nutritionValue)
     {
-        float oldHunger = hunger;
+        float old = hunger;
         hunger = Mathf.Min(100f, hunger + nutritionValue);
-        OnStatChanged?.Invoke(UnitStatType.Hunger, oldHunger, hunger);
+        OnStatChanged?.Invoke(UnitStatType.Hunger, old, hunger);
     }
 
-    /// <summary>
-    /// 충성심 변화
-    /// </summary>
     public void ModifyLoyalty(float amount)
     {
-        float oldLoyalty = loyalty;
+        float old = loyalty;
         loyalty = Mathf.Clamp(loyalty + amount, 0f, 100f);
-        OnStatChanged?.Invoke(UnitStatType.Loyalty, oldLoyalty, loyalty);
+        OnStatChanged?.Invoke(UnitStatType.Loyalty, old, loyalty);
+        if (loyalty < 50f && old >= 50f) OnLoyaltyCritical?.Invoke();
+    }
 
-        if (loyalty < 20f && oldLoyalty >= 20f)
+    public void ModifyStress(float amount)
+    {
+        float old = stress;
+        stress = Mathf.Clamp(stress + amount, 0f, 100f);
+        OnStatChanged?.Invoke(UnitStatType.Stress, old, stress);
+        if (stress >= 80f && old < 80f) OnStressCritical?.Invoke();
+    }
+
+    public void ReduceStress(float amount) => ModifyStress(-Mathf.Abs(amount));
+    public void IncreaseStress(float amount) => ModifyStress(Mathf.Abs(amount));
+
+    public void GainExp(float amount)
+    {
+        if (amount <= 0) return;
+        currentExp += amount;
+        while (currentExp >= expToNextLevel)
         {
-            OnLoyaltyCritical?.Invoke();
+            currentExp -= expToNextLevel;
+            level++;
+            OnLevelUp?.Invoke(level);
         }
     }
 
-    /// <summary>
-    /// 특성에 의한 스탯 버프
-    /// </summary>
-    public void ApplyBuff(UnitStatType statType, float multiplier)
+    public void GainExpFromAction(ExpGainAction action, float multiplier = 1f)
     {
-        switch (statType)
+        float baseExp = action switch { ExpGainAction.Combat => 2f, ExpGainAction.Social => 0.5f, _ => 1f };
+        GainExp(baseExp * multiplier);
+    }
+
+    public void ApplyBuff(UnitStatType stat, float multiplier)
+    {
+        switch (stat)
         {
-            case UnitStatType.WorkSpeed:
-                workSpeed *= multiplier;
-                break;
-            case UnitStatType.GatherPower:
-                gatherPower *= multiplier;
-                break;
-            case UnitStatType.MoveSpeed:
-                moveSpeed *= multiplier;
-                break;
-            case UnitStatType.AttackPower:
-                attackPower *= multiplier;
-                break;
+            case UnitStatType.WorkSpeed: workSpeed *= multiplier; break;
+            case UnitStatType.GatherPower: gatherPower *= multiplier; break;
+            case UnitStatType.MoveSpeed: moveSpeed *= multiplier; break;
+            case UnitStatType.AttackPower: attackPower *= multiplier; break;
         }
     }
 }

@@ -18,7 +18,7 @@ public class Building : MonoBehaviour
     private PostedTask constructionTask;
     private bool isInitialized = false;
 
-    // ★ 캐시된 컴포넌트
+    // 캐시된 컴포넌트
     private IWorkstation _workstation;
     private IProducer _producer;
     private IStorage _storage;
@@ -38,7 +38,7 @@ public class Building : MonoBehaviour
     public float ConstructionProgress => data != null && data.ConstructionWorkRequired > 0
         ? currentConstructionWork / data.ConstructionWorkRequired : 1f;
 
-    // ★ 새 Properties
+    // 새 Properties
     public Transform WorkPoint => workPoint;
     public Transform DropPoint => dropPoint;
 
@@ -105,7 +105,7 @@ public class Building : MonoBehaviour
         GridPosition = gridPos;
         isInitialized = true;
 
-        // ★ 컴포넌트 캐시 (Awake 전에 Initialize 호출될 경우 대비)
+        // 컴포넌트 캐시 (Awake 전에 Initialize 호출될 경우 대비)
         if (_workstation == null)
             CacheComponents();
 
@@ -138,7 +138,7 @@ public class Building : MonoBehaviour
         {
             if (unit != null && unit.IsAlive)
             {
-                var unitAI = unit.GetComponent<UnitAi>();
+                var unitAI = unit.GetComponent<UnitAI>();  // ★ 수정: UnitAi → UnitAI
                 if (unitAI != null)
                 {
                     unitAI.UpdateAssignedWorkPosition(newWorldPosition, size);
@@ -205,7 +205,7 @@ public class Building : MonoBehaviour
             constructionTask = null;
         }
 
-        // ★ BuildingManager에 등록
+        // BuildingManager에 등록
         BuildingManager.Instance?.RegisterBuilding(this);
 
         OnConstructionComplete?.Invoke(this);
@@ -233,7 +233,7 @@ public class Building : MonoBehaviour
         if (constructionTask != null)
             TaskManager.Instance?.CancelTask(constructionTask);
 
-        // ★ BuildingManager에서 제거
+        // BuildingManager에서 제거
         BuildingManager.Instance?.UnregisterBuilding(this);
 
         GridDataManager.Instance?.RemoveObject(GridPosition);
@@ -245,11 +245,11 @@ public class Building : MonoBehaviour
         if (constructionTask != null)
             TaskManager.Instance?.CancelTask(constructionTask);
 
-        // ★ BuildingManager에서 제거
+        // BuildingManager에서 제거
         BuildingManager.Instance?.UnregisterBuilding(this);
     }
 
-    // ★ 유틸리티 메서드
+    // 유틸리티 메서드
     public T GetBuildingComponent<T>() where T : class
     {
         return GetComponent<T>();

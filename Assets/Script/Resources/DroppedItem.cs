@@ -634,7 +634,7 @@ public class DroppedItem : MonoBehaviour
         // 소유자의 개인 아이템 목록에서 제거
         if (owner != null)
         {
-            owner.GetComponent<UnitAi>()?.RemovePersonalItem(this);
+            owner.GetComponent<UnitAI>()?.RemovePersonalItem(this);
         }
     }
 
