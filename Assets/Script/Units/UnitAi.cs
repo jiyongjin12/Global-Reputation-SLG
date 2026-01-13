@@ -195,7 +195,7 @@ public class UnitAI : MonoBehaviour
         if (bb != null)
         {
             bb.OnHungerCritical += OnHungerCritical;
-            bb.OnStressCritical += OnStressCritical;
+            bb.OnMentalHealthCritical += OnMentalHealthCritical;
         }
     }
 
@@ -1420,7 +1420,7 @@ public class UnitAI : MonoBehaviour
         if (bb.ShouldIgnoreCommand())
         {
             Debug.Log($"[UnitAI] {unit.UnitName}: 명령 무시! (충성도: {bb.Loyalty:F0}, 확률: {bb.CommandIgnoreChance * 100:F0}%)");
-            bb.ReduceStress(2f);  // 반항의 쾌감
+            bb.IncreaseMentalHealth(2f);  // 반항의 쾌감
             return;
         }
 
@@ -1433,6 +1433,27 @@ public class UnitAI : MonoBehaviour
 
         InterruptCurrentTask();
         ExecutePlayerCommand();
+    }
+
+    /// <summary>
+    /// 현재 작업 취소 (명령 대기 상태로 전환 시)
+    /// </summary>
+    public void CancelCurrentTask()
+    {
+        // 현재 작업 중단
+        InterruptCurrentTask();
+
+        // 상호작용 중단
+        if (currentBehavior == AIBehaviorState.Socializing)
+            CancelSocialInteraction();
+
+        // 상태 초기화
+        SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+        bb.CurrentTask = null;
+        bb.HasPlayerCommand = false;
+        bb.PlayerCommand = null;
+
+        Debug.Log($"[UnitAI] {unit.UnitName}: 현재 작업 취소됨");
     }
 
     private void ExecutePlayerCommand()
@@ -1647,9 +1668,9 @@ public class UnitAI : MonoBehaviour
         Debug.Log($"[UnitAI] {unit.UnitName}: 배고파!");
     }
 
-    private void OnStressCritical()
+    private void OnMentalHealthCritical()
     {
-        Debug.Log($"[UnitAI] {unit.UnitName}: 스트레스 위험!");
+        Debug.Log($"[UnitAI] {unit.UnitName}: 정신력 위험!");
     }
 
     // ==================== Gizmos ====================

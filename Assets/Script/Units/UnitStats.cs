@@ -6,8 +6,8 @@ using UnityEngine;
 /// </summary>
 public enum UnitStatType
 {
-    HP, MaxHP, Hunger, Loyalty, Stress,
-    MoveSpeed, WorkSpeed, AttackPower, GatherPower
+    HP, MaxHP, Hunger, Loyalty, MentalHealth,
+    MoveSpeed, WorkSpeed, AttackPower, AttackSpeed, GatherPower
 }
 
 /// <summary>
@@ -35,14 +35,15 @@ public class UnitStats
     [SerializeField] private float currentExp = 0f;
     [SerializeField] private float expToNextLevel = 100f;
 
-    [Header("=== 스트레스 ===")]
-    [SerializeField] private float stress = 0f;
+    [Header("=== 정신력 (높을수록 좋음) ===")]
+    [SerializeField] private float mentalHealth = 100f;
 
     [Header("=== 능력치 ===")]
     [SerializeField] private float moveSpeed = 2f;
     [SerializeField] private float workSpeed = 1f;
     [SerializeField] private float gatherPower = 1f;
     [SerializeField] private float attackPower = 10f;
+    [SerializeField] private float attackSpeed = 1f;
 
     // Events
     public event Action OnDeath;
@@ -50,7 +51,7 @@ public class UnitStats
     public event Action OnHungerCritical;
     public event Action OnLoyaltyCritical;
     public event Action<int> OnLevelUp;
-    public event Action OnStressCritical;
+    public event Action OnMentalHealthCritical;
 
     // Properties
     public float MaxHP => maxHP;
@@ -58,7 +59,7 @@ public class UnitStats
     public float HPPercent => maxHP > 0 ? currentHP / maxHP : 0f;
     public float Hunger => hunger;
     public float Loyalty => loyalty;
-    public float Stress => stress;
+    public float MentalHealth => mentalHealth;
     public int Level => level;
     public float CurrentExp => currentExp;
     public float ExpToNextLevel => expToNextLevel;
@@ -67,12 +68,14 @@ public class UnitStats
     public float WorkSpeed => workSpeed;
     public float GatherPower => gatherPower;
     public float AttackPower => attackPower;
+    public float AttackSpeed => attackSpeed;
 
     public bool IsAlive => currentHP > 0;
     public bool IsHungry => hunger < 30f;
     public bool IsStarving => hunger <= 0f;
     public bool IsDisloyal => loyalty < 50f;
-    public bool IsStressed => stress >= 80f;
+    public bool IsMentallyUnstable => mentalHealth < 20f;
+    public bool IsMentallyStressed => mentalHealth < 50f;
 
     /// <summary>
     /// 명령 무시 확률 (50 이상: 0%, 49: 10%, 0: 25%)
@@ -85,8 +88,8 @@ public class UnitStats
     {
         maxHP = baseMaxHP;
         currentHP = maxHP;
-        hunger = loyalty = 100f;
-        stress = currentExp = 0f;
+        hunger = loyalty = mentalHealth = 100f;
+        currentExp = 0f;
         level = 1;
         expToNextLevel = 100f;
     }
@@ -130,16 +133,20 @@ public class UnitStats
         if (loyalty < 50f && old >= 50f) OnLoyaltyCritical?.Invoke();
     }
 
-    public void ModifyStress(float amount)
+    public void ModifyMentalHealth(float amount)
     {
-        float old = stress;
-        stress = Mathf.Clamp(stress + amount, 0f, 100f);
-        OnStatChanged?.Invoke(UnitStatType.Stress, old, stress);
-        if (stress >= 80f && old < 80f) OnStressCritical?.Invoke();
+        float old = mentalHealth;
+        mentalHealth = Mathf.Clamp(mentalHealth + amount, 0f, 100f);
+        OnStatChanged?.Invoke(UnitStatType.MentalHealth, old, mentalHealth);
+        if (mentalHealth < 20f && old >= 20f) OnMentalHealthCritical?.Invoke();
     }
 
-    public void ReduceStress(float amount) => ModifyStress(-Mathf.Abs(amount));
-    public void IncreaseStress(float amount) => ModifyStress(Mathf.Abs(amount));
+    public void IncreaseMentalHealth(float amount) => ModifyMentalHealth(Mathf.Abs(amount));
+    public void DecreaseMentalHealth(float amount) => ModifyMentalHealth(-Mathf.Abs(amount));
+
+    // 호환성용
+    public void ReduceStress(float amount) => IncreaseMentalHealth(amount);
+    public void IncreaseStress(float amount) => DecreaseMentalHealth(amount);
 
     public void GainExp(float amount)
     {
@@ -167,6 +174,7 @@ public class UnitStats
             case UnitStatType.GatherPower: gatherPower *= multiplier; break;
             case UnitStatType.MoveSpeed: moveSpeed *= multiplier; break;
             case UnitStatType.AttackPower: attackPower *= multiplier; break;
+            case UnitStatType.AttackSpeed: attackSpeed *= multiplier; break;
         }
     }
 }

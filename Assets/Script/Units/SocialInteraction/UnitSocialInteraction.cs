@@ -1,94 +1,68 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
-public enum SocialInteractionResult { Good, Neutral, Bad }
-public enum SocialInteractionType { Conversation, Greeting, Gossip, Argue, Comfort, Joke }
-
 /// <summary>
-/// 상호작용 결과 데이터
+/// 사회적 상호작용 결과
 /// </summary>
-public class SocialInteractionData
+public enum SocialInteractionResult
 {
-    public SocialInteractionType Type;
-    public SocialInteractionResult Result;
-    public Unit Initiator;
-    public Unit Target;
-    public float StressChange;
-    public string Message;
-
-    public SocialInteractionData(Unit initiator, Unit target)
-    {
-        Initiator = initiator;
-        Target = target;
-    }
+    Good,       // 좋은 결과: 정신력 +10
+    Neutral,    // 보통: 변화 없음
+    Bad         // 나쁜 결과: 정신력 -8
 }
 
 /// <summary>
-/// 상호작용 처리 인터페이스 (추후 AI API 연동용)
+/// 상호작용 유형
+/// </summary>
+public enum SocialInteractionType
+{
+    Greeting,       // 인사
+    Conversation,   // 대화
+    Joke,           // 농담
+    Argue,          // 논쟁
+    Comfort         // 위로
+}
+
+/// <summary>
+/// 사회적 상호작용 처리 인터페이스
 /// </summary>
 public interface ISocialInteractionProcessor
 {
-    SocialInteractionData ProcessInteraction(Unit initiator, Unit target);
+    (SocialInteractionResult result, SocialInteractionType type) Process(Unit initiator, Unit target);
 }
 
 /// <summary>
-/// 기본 랜덤 상호작용 처리기 (추후 AI API로 대체 가능)
+/// 기본 랜덤 상호작용 처리기
 /// </summary>
 public class RandomSocialProcessor : ISocialInteractionProcessor
 {
-    private const float GoodChance = 0.4f;
-    private const float NeutralChance = 0.4f;
-    private const float GoodStressReduction = 10f;
-    private const float BadStressIncrease = 8f;
-
-    public SocialInteractionData ProcessInteraction(Unit initiator, Unit target)
+    public (SocialInteractionResult result, SocialInteractionType type) Process(Unit initiator, Unit target)
     {
-        var data = new SocialInteractionData(initiator, target);
         float roll = UnityEngine.Random.value;
 
-        if (roll < GoodChance)
+        if (roll < 0.4f)
         {
-            data.Result = SocialInteractionResult.Good;
-            data.StressChange = -GoodStressReduction;
-            data.Type = GetRandomGoodType();
-            data.Message = GetGoodMessage(data.Type);
+            // 40% 좋은 결과
+            SocialInteractionType type = UnityEngine.Random.value < 0.5f
+                ? SocialInteractionType.Conversation
+                : (UnityEngine.Random.value < 0.5f ? SocialInteractionType.Joke : SocialInteractionType.Comfort);
+            return (SocialInteractionResult.Good, type);
         }
-        else if (roll < GoodChance + NeutralChance)
+        else if (roll < 0.8f)
         {
-            data.Result = SocialInteractionResult.Neutral;
-            data.StressChange = 0f;
-            data.Type = SocialInteractionType.Greeting;
-            data.Message = "서로 인사를 나눴다.";
+            // 40% 보통
+            return (SocialInteractionResult.Neutral, SocialInteractionType.Greeting);
         }
         else
         {
-            data.Result = SocialInteractionResult.Bad;
-            data.StressChange = BadStressIncrease;
-            data.Type = SocialInteractionType.Argue;
-            data.Message = "말다툼이 있었다.";
+            // 20% 나쁜 결과
+            return (SocialInteractionResult.Bad, SocialInteractionType.Argue);
         }
-
-        return data;
     }
-
-    private SocialInteractionType GetRandomGoodType()
-    {
-        var types = new[] { SocialInteractionType.Conversation, SocialInteractionType.Joke, SocialInteractionType.Comfort };
-        return types[UnityEngine.Random.Range(0, types.Length)];
-    }
-
-    private string GetGoodMessage(SocialInteractionType type) => type switch
-    {
-        SocialInteractionType.Conversation => "즐거운 대화를 나눴다.",
-        SocialInteractionType.Joke => "농담을 주고받으며 웃었다.",
-        SocialInteractionType.Comfort => "서로를 위로했다.",
-        _ => "좋은 시간을 보냈다."
-    };
 }
 
 /// <summary>
-/// 유닛 사회적 상호작용 관리자
+/// 유닛 사회적 상호작용 컴포넌트
 /// </summary>
 public class UnitSocialInteraction : MonoBehaviour
 {
@@ -97,61 +71,72 @@ public class UnitSocialInteraction : MonoBehaviour
     [SerializeField] private float interactionDuration = 2f;
     [SerializeField] private float searchRadius = 10f;
 
-    [Header("=== 디버그 ===")]
-    [SerializeField] private bool isInteracting = false;
-    [SerializeField] private float interactionTimer = 0f;
+    [Header("=== 정신력 변화량 ===")]
+    [SerializeField] private float goodResultMentalBonus = 10f;
+    [SerializeField] private float badResultMentalPenalty = 8f;
 
-    private Unit unit;
-    private UnitBlackboard bb;
-    private ISocialInteractionProcessor processor = new RandomSocialProcessor();
+    // 상태
+    private Unit owner;
+    private Unit interactionTarget;
+    private float interactionStartTime;
+    private bool isInteracting;
+    private ISocialInteractionProcessor processor;
 
-    public event Action<SocialInteractionData> OnInteractionComplete;
+    // 결과
+    private SocialInteractionResult lastResult;
+    private SocialInteractionType lastType;
 
+    // 이벤트
+    public event Action<Unit, Unit, SocialInteractionResult, SocialInteractionType> OnInteractionComplete;
+
+    // Properties
     public bool IsInteracting => isInteracting;
-    public float InteractionRadius => interactionRadius;
+    public Unit InteractionTarget => interactionTarget;
+    public float InteractionRadius => interactionRadius;  // 추가
 
-    private void Awake() => unit = GetComponent<Unit>();
-    private void Start() => bb = unit.Blackboard;
+    private void Awake()
+    {
+        owner = GetComponent<Unit>();
+        processor = new RandomSocialProcessor();
+    }
 
     /// <summary>
-    /// 상호작용 처리기 변경 (AI API 연동 시 사용)
+    /// 상호작용 처리기 설정 (AI API 연동용)
     /// </summary>
-    public void SetProcessor(ISocialInteractionProcessor newProcessor) =>
+    public void SetProcessor(ISocialInteractionProcessor newProcessor)
+    {
         processor = newProcessor ?? new RandomSocialProcessor();
+    }
 
     /// <summary>
-    /// 근처 상호작용 가능한 유닛 찾기
+    /// 근처 유닛 찾기
     /// </summary>
     public Unit FindNearbyUnitForInteraction()
     {
-        if (!bb.CanSocialize) return null;
-
         var colliders = Physics.OverlapSphere(transform.position, searchRadius);
-        List<Unit> candidates = new();
+        Unit nearest = null;
+        float nearestDist = float.MaxValue;
 
         foreach (var col in colliders)
         {
-            if (col.gameObject == gameObject) continue;
+            Unit other = col.GetComponent<Unit>();
+            if (other == null || other == owner || !other.IsAlive) continue;
 
-            var otherUnit = col.GetComponent<Unit>();
-            if (otherUnit == null || !otherUnit.IsAlive) continue;
+            // 상대도 Idle 상태여야 함
+            if (!other.IsIdle) continue;
 
-            var otherBB = otherUnit.Blackboard;
-            if (otherBB == null || !otherBB.CanSocialize || !otherBB.IsIdle) continue;
+            // 상대방 상호작용 컴포넌트 확인
+            var otherSocial = other.GetComponent<UnitSocialInteraction>();
+            if (otherSocial != null && otherSocial.IsInteracting) continue;
 
-            candidates.Add(otherUnit);
+            float dist = Vector3.Distance(transform.position, other.transform.position);
+            if (dist < nearestDist)
+            {
+                nearestDist = dist;
+                nearest = other;
+            }
         }
 
-        if (candidates.Count == 0) return null;
-
-        // 가장 가까운 유닛
-        Unit nearest = null;
-        float nearestDist = float.MaxValue;
-        foreach (var candidate in candidates)
-        {
-            float dist = Vector3.Distance(transform.position, candidate.transform.position);
-            if (dist < nearestDist) { nearestDist = dist; nearest = candidate; }
-        }
         return nearest;
     }
 
@@ -160,26 +145,42 @@ public class UnitSocialInteraction : MonoBehaviour
     /// </summary>
     public bool StartInteraction(Unit target)
     {
-        if (target == null || isInteracting || !bb.CanSocialize) return false;
+        if (target == null || isInteracting) return false;
 
         float dist = Vector3.Distance(transform.position, target.transform.position);
-        if (dist > interactionRadius) return false;
+        if (dist > interactionRadius)
+        {
+            Debug.Log($"[Social] {owner.UnitName}: {target.UnitName}에게 너무 멀어서 상호작용 불가");
+            return false;
+        }
 
+        interactionTarget = target;
+        interactionStartTime = Time.time;
         isInteracting = true;
-        interactionTimer = 0f;
-        bb.StartSocialInteraction(target);
 
-        // 상대방에게도 알림
-        target.GetComponent<UnitSocialInteraction>()?.OnInteractionStartedByOther(unit);
+        // Blackboard 업데이트
+        owner.Blackboard?.StartSocialInteraction(target);
 
+        // 상대방도 상호작용 상태로
+        var targetSocial = target.GetComponent<UnitSocialInteraction>();
+        if (targetSocial != null)
+        {
+            targetSocial.SetAsTarget(owner);
+        }
+
+        Debug.Log($"[Social] {owner.UnitName}이(가) {target.UnitName}와 상호작용 시작");
         return true;
     }
 
-    public void OnInteractionStartedByOther(Unit initiator)
+    /// <summary>
+    /// 상대방으로 설정됨
+    /// </summary>
+    public void SetAsTarget(Unit initiator)
     {
+        interactionTarget = initiator;
+        interactionStartTime = Time.time;
         isInteracting = true;
-        interactionTimer = 0f;
-        bb.StartSocialInteraction(initiator);
+        owner.Blackboard?.StartSocialInteraction(initiator);
     }
 
     /// <summary>
@@ -189,9 +190,15 @@ public class UnitSocialInteraction : MonoBehaviour
     {
         if (!isInteracting) return false;
 
-        interactionTimer += Time.deltaTime;
+        // 대상이 사라졌으면 종료
+        if (interactionTarget == null || !interactionTarget.IsAlive)
+        {
+            CancelInteraction();
+            return false;
+        }
 
-        if (interactionTimer >= interactionDuration)
+        // 시간 경과 체크
+        if (Time.time - interactionStartTime >= interactionDuration)
         {
             CompleteInteraction();
             return false;
@@ -200,44 +207,123 @@ public class UnitSocialInteraction : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// 상호작용 완료
+    /// </summary>
     private void CompleteInteraction()
     {
-        if (bb.InteractionTarget == null) { EndInteraction(); return; }
+        if (!isInteracting || interactionTarget == null) return;
 
-        var result = processor.ProcessInteraction(unit, bb.InteractionTarget);
-        ApplyInteractionResult(result);
-        unit.GainExpFromAction(ExpGainAction.Social);
-        OnInteractionComplete?.Invoke(result);
+        // 결과 계산
+        (lastResult, lastType) = processor.Process(owner, interactionTarget);
 
+        // 정신력 변화 적용
+        ApplyMentalHealthChange(owner, lastResult);
+        ApplyMentalHealthChange(interactionTarget, lastResult);
+
+        // 경험치 지급
+        owner.GainExpFromAction(ExpGainAction.Social);
+
+        Debug.Log($"[Social] {owner.UnitName} ↔ {interactionTarget.UnitName}: {lastType} ({lastResult})");
+
+        // 이벤트 발생
+        OnInteractionComplete?.Invoke(owner, interactionTarget, lastResult, lastType);
+
+        // 상태 정리
         EndInteraction();
     }
 
-    private void ApplyInteractionResult(SocialInteractionData result)
+    /// <summary>
+    /// 정신력 변화 적용
+    /// </summary>
+    private void ApplyMentalHealthChange(Unit unit, SocialInteractionResult result)
     {
-        if (result.StressChange != 0)
+        switch (result)
         {
-            bb.ModifyStress(result.StressChange);
-            result.Target?.Blackboard?.ModifyStress(result.StressChange);
+            case SocialInteractionResult.Good:
+                unit.IncreaseMentalHealth(goodResultMentalBonus);
+                break;
+            case SocialInteractionResult.Bad:
+                unit.DecreaseMentalHealth(badResultMentalPenalty);
+                break;
+                // Neutral은 변화 없음
         }
     }
 
-    public void EndInteraction()
+    /// <summary>
+    /// 상호작용 취소
+    /// </summary>
+    public void CancelInteraction()
     {
-        isInteracting = false;
-        interactionTimer = 0f;
-        bb.EndSocialInteraction();
+        if (!isInteracting) return;
+
+        Debug.Log($"[Social] {owner.UnitName}: 상호작용 취소됨");
+        EndInteraction();
     }
 
+    /// <summary>
+    /// 상호작용 중단 (호환성용)
+    /// </summary>
     public void InterruptInteraction()
     {
-        if (isInteracting) EndInteraction();
+        CancelInteraction();
     }
 
+    /// <summary>
+    /// 상호작용 종료 (공통)
+    /// </summary>
+    private void EndInteraction()
+    {
+        // 상대방도 종료
+        if (interactionTarget != null)
+        {
+            var targetSocial = interactionTarget.GetComponent<UnitSocialInteraction>();
+            if (targetSocial != null && targetSocial.interactionTarget == owner)
+            {
+                targetSocial.ForceEndInteraction();
+            }
+        }
+
+        isInteracting = false;
+        interactionTarget = null;
+        owner.Blackboard?.EndSocialInteraction();
+    }
+
+    /// <summary>
+    /// 강제 종료 (상대방에서 호출)
+    /// </summary>
+    public void ForceEndInteraction()
+    {
+        isInteracting = false;
+        interactionTarget = null;
+        owner.Blackboard?.EndSocialInteraction();
+    }
+
+    /// <summary>
+    /// 마지막 상호작용 결과
+    /// </summary>
+    public (SocialInteractionResult result, SocialInteractionType type) GetLastInteractionResult()
+    {
+        return (lastResult, lastType);
+    }
+
+#if UNITY_EDITOR
     private void OnDrawGizmosSelected()
     {
-        Gizmos.color = new Color(0, 1, 0, 0.2f);
-        Gizmos.DrawWireSphere(transform.position, searchRadius);
-        Gizmos.color = new Color(0, 1, 1, 0.3f);
+        // 상호작용 범위
+        Gizmos.color = Color.cyan;
         Gizmos.DrawWireSphere(transform.position, interactionRadius);
+
+        // 탐색 범위
+        Gizmos.color = new Color(0, 1, 1, 0.3f);
+        Gizmos.DrawWireSphere(transform.position, searchRadius);
+
+        // 현재 상호작용 대상
+        if (isInteracting && interactionTarget != null)
+        {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawLine(transform.position, interactionTarget.transform.position);
+        }
     }
+#endif
 }

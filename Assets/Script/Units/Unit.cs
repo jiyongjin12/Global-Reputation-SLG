@@ -62,7 +62,10 @@ public class Unit : MonoBehaviour
     [Header("=== 니즈 ===")]
     [SerializeField, Range(0, 100)] private float hunger = 100f;
     [SerializeField, Range(0, 100)] private float loyalty = 100f;
-    [SerializeField, Range(0, 100)] private float stress = 0f;
+    [SerializeField, Range(0, 100)] private float mentalHealth = 100f;  // 정신력 (높을수록 좋음)
+
+    [Header("=== 전투 스탯 ===")]
+    [SerializeField] private float baseAttackSpeed = 1f;  // 공격 속도
 
     [Header("=== 특성 ===")]
     [SerializeField] private List<UnitTraitSO> traits = new();
@@ -108,7 +111,8 @@ public class Unit : MonoBehaviour
     public float ExpToNextLevel => expToNextLevel;
     public float Hunger => hunger;
     public float Loyalty => loyalty;
-    public float Stress => stress;
+    public float MentalHealth => mentalHealth;  // 정신력
+    public float AttackSpeed => baseAttackSpeed * GetTraitMultiplier(UnitStatType.AttackSpeed);
     public UnitInventory Inventory => inventory;
     public List<UnitTraitSO> Traits => traits;
     public NavMeshAgent Agent => agent;
@@ -118,7 +122,8 @@ public class Unit : MonoBehaviour
     public bool IsHungry => hunger < 30f;
     public bool IsStarving => hunger <= 0f;
     public bool IsDisloyal => loyalty < 50f;
-    public bool IsStressed => stress >= 80f;
+    public bool IsMentallyUnstable => mentalHealth < 20f;  // 정신력 불안정
+    public bool IsMentallyStressed => mentalHealth < 50f;  // 정신력 스트레스
     public UnitTask CurrentTask => null;
 
     // ==================== Events ====================
@@ -151,8 +156,8 @@ public class Unit : MonoBehaviour
             unitType = type.Value;
 
         currentHP = maxHP;
-        hunger = loyalty = 100f;
-        stress = currentExp = 0f;
+        hunger = loyalty = mentalHealth = 100f;
+        currentExp = 0f;
         level = 1;
         expToNextLevel = 100f;
 
@@ -178,7 +183,7 @@ public class Unit : MonoBehaviour
     {
         Blackboard.Hunger = hunger;
         Blackboard.Loyalty = loyalty;
-        Blackboard.Stress = stress;
+        Blackboard.MentalHealth = mentalHealth;
         Blackboard.Level = level;
         Blackboard.CurrentExp = currentExp;
         Blackboard.ExpToNextLevel = expToNextLevel;
@@ -256,6 +261,35 @@ public class Unit : MonoBehaviour
         agent.speed = moveSpeed;
     }
 
+    /// <summary>
+    /// 모든 행동 중지 (명령 대기 상태)
+    /// </summary>
+    public void StopAllActions()
+    {
+        // 이동 중지
+        StopMoving();
+
+        // Blackboard 초기화
+        if (Blackboard != null)
+        {
+            Blackboard.TargetPosition = null;
+            Blackboard.TargetObject = null;
+            Blackboard.CurrentTask = null;
+            Blackboard.HasPlayerCommand = false;
+            Blackboard.PlayerCommand = null;
+            Blackboard.SetState(UnitState.Idle);
+        }
+
+        // UnitAI에게 작업 중단 알림
+        var unitAI = GetComponent<UnitAI>();
+        if (unitAI != null)
+        {
+            unitAI.CancelCurrentTask();
+        }
+
+        Debug.Log($"[Unit] {unitName}: 모든 행동 중지");
+    }
+
     public bool HasArrivedAtDestination()
     {
         if (agent.pathPending) return false;
@@ -311,14 +345,18 @@ public class Unit : MonoBehaviour
         Blackboard.ModifyLoyalty(amount);
     }
 
-    public void ModifyStress(float amount)
+    public void ModifyMentalHealth(float amount)
     {
-        stress = Mathf.Clamp(stress + amount, 0f, 100f);
-        Blackboard.ModifyStress(amount);
+        mentalHealth = Mathf.Clamp(mentalHealth + amount, 0f, 100f);
+        Blackboard.ModifyMentalHealth(amount);
     }
 
-    public void ReduceStress(float amount) => ModifyStress(-Mathf.Abs(amount));
-    public void IncreaseStress(float amount) => ModifyStress(Mathf.Abs(amount));
+    public void IncreaseMentalHealth(float amount) => ModifyMentalHealth(Mathf.Abs(amount));
+    public void DecreaseMentalHealth(float amount) => ModifyMentalHealth(-Mathf.Abs(amount));
+
+    // 호환성용 (기존 코드와의 연동)
+    public void ReduceStress(float amount) => IncreaseMentalHealth(amount);
+    public void IncreaseStress(float amount) => DecreaseMentalHealth(amount);
 
     // ==================== Experience ====================
 
@@ -557,7 +595,7 @@ public class Unit : MonoBehaviour
         $"=== {unitName} ({unitType}) ===\n" +
         $"레벨: {level} (EXP: {currentExp:F0}/{expToNextLevel:F0})\n" +
         $"HP: {currentHP:F0}/{maxHP:F0}\n" +
-        $"배고픔: {hunger:F0} | 충성도: {loyalty:F0} | 스트레스: {stress:F0}\n" +
+        $"배고픔: {hunger:F0} | 충성도: {loyalty:F0} | 정신력: {mentalHealth:F0}\n" +
         $"채집력: {GatherPower:F2} (기본 {baseGatherPower} × {GetGatherEfficiency():F2})\n" +
         $"공격력: {AttackPower:F2} (기본 {baseAttackPower} × {GetCombatEfficiency():F2})\n" +
         $"특성: {traits.Count}개";

@@ -11,10 +11,10 @@ public class UnitBlackboard
     public bool IsAlive = true;
     public UnitState CurrentState = UnitState.Idle;
 
-    // 니즈
+    // 니즈 (모두 높을수록 좋음)
     [Range(0, 100)] public float Hunger = 100f;
     [Range(0, 100)] public float Loyalty = 100f;
-    [Range(0, 100)] public float Stress = 0f;
+    [Range(0, 100)] public float MentalHealth = 100f;  // 정신력 (높을수록 좋음)
 
     // 레벨
     public int Level = 1;
@@ -45,7 +45,7 @@ public class UnitBlackboard
     // Events
     public event Action OnHungerCritical;
     public event Action OnLoyaltyCritical;
-    public event Action OnStressCritical;
+    public event Action OnMentalHealthCritical;
     public event Action<int> OnLevelUp;
     public event Action<UnitState> OnStateChanged;
 
@@ -53,7 +53,8 @@ public class UnitBlackboard
     public bool IsHungry => Hunger < 30f;
     public bool IsStarving => Hunger <= 0f;
     public bool IsDisloyal => Loyalty < 50f;
-    public bool IsStressed => Stress >= 80f;
+    public bool IsMentallyUnstable => MentalHealth < 20f;   // 심각한 정신 상태
+    public bool IsMentallyStressed => MentalHealth < 50f;   // 스트레스 받는 상태
     public bool IsIdle => CurrentState == UnitState.Idle && CurrentTask == null && !HasPlayerCommand;
     public bool CanSocialize => Time.time - LastSocialInteractionTime >= SocialCooldown;
 
@@ -93,15 +94,19 @@ public class UnitBlackboard
         if (Loyalty < 50f && old >= 50f) OnLoyaltyCritical?.Invoke();
     }
 
-    public void ModifyStress(float amount)
+    public void ModifyMentalHealth(float amount)
     {
-        float old = Stress;
-        Stress = Mathf.Clamp(Stress + amount, 0f, 100f);
-        if (Stress >= 80f && old < 80f) OnStressCritical?.Invoke();
+        float old = MentalHealth;
+        MentalHealth = Mathf.Clamp(MentalHealth + amount, 0f, 100f);
+        if (MentalHealth < 20f && old >= 20f) OnMentalHealthCritical?.Invoke();
     }
 
-    public void ReduceStress(float amount) => ModifyStress(-Mathf.Abs(amount));
-    public void IncreaseStress(float amount) => ModifyStress(Mathf.Abs(amount));
+    public void IncreaseMentalHealth(float amount) => ModifyMentalHealth(Mathf.Abs(amount));
+    public void DecreaseMentalHealth(float amount) => ModifyMentalHealth(-Mathf.Abs(amount));
+
+    // 호환성용
+    public void ReduceStress(float amount) => IncreaseMentalHealth(amount);
+    public void IncreaseStress(float amount) => DecreaseMentalHealth(amount);
 
     public void GainExp(float amount)
     {
@@ -127,8 +132,8 @@ public class UnitBlackboard
     {
         IsAlive = true;
         CurrentState = UnitState.Idle;
-        Hunger = Loyalty = 100f;
-        Stress = CurrentExp = 0f;
+        Hunger = Loyalty = MentalHealth = 100f;
+        CurrentExp = 0f;
         Level = 1;
         ExpToNextLevel = 100f;
         TargetPosition = null;
