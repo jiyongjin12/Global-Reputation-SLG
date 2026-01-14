@@ -3,6 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 유닛 AI - 배달 및 아이템 관련
+/// ★ 저장고 배달/아이템 줍기 완료 시 ContinuePersistentCommand() 호출
 /// </summary>
 public partial class UnitAI
 {
@@ -105,14 +106,16 @@ public partial class UnitAI
         }
     }
 
+    /// <summary>
+    /// ★ 개인 아이템 줍기 - 완료 시 지속 명령 루프로
+    /// </summary>
     private void UpdatePickingUpPersonalItem()
     {
         // Null 체크
         if (currentPersonalItem == null || !currentPersonalItem || currentPersonalItem.IsBeingMagneted)
         {
             currentPersonalItem = null;
-            TryPickupPersonalItems();
-            if (currentPersonalItem == null) ReturnToPreviousTaskOrIdle();
+            TryPickupNextOrContinueLoop();
             return;
         }
 
@@ -148,10 +151,12 @@ public partial class UnitAI
         var resource = currentPersonalItem.Resource;
         int originalAmount = currentPersonalItem.Amount;
 
-        if (ShouldDepositInventory(resource))
+        // ★ 인벤 가득 체크 - 지속 명령 루프로
+        if (unit.Inventory.IsFull || (resource != null && !unit.Inventory.CanAddAny(resource)))
         {
+            Debug.Log($"[UnitAI] {unit.UnitName}: 줍기 중 인벤 가득 → 루프로");
             GiveUpRemainingPersonalItems();
-            StartDeliveryToStorage();
+            ContinuePersistentCommand();
             return;
         }
 
@@ -163,17 +168,115 @@ public partial class UnitAI
         if (pickedAmount >= originalAmount)
         {
             currentPersonalItem = null;
-            TryPickupPersonalItems();
-            if (currentPersonalItem == null) ReturnToPreviousTaskOrIdle();
+            TryPickupNextOrContinueLoop();
         }
         else
         {
+            // 일부만 주웠으면 인벤 가득
             GiveUpRemainingPersonalItems();
-            StartDeliveryToStorage();
+            ContinuePersistentCommand();
         }
     }
 
-    private void GiveUpRemainingPersonalItems()
+    /// <summary>
+    /// ★ 다음 아이템 줍기 또는 지속 명령 루프로
+    /// </summary>
+    private void TryPickupNextOrContinueLoop()
+    {
+        CleanupItemLists();
+        personalItems.RemoveAll(item => item == null || !item || item.Owner != unit || item.IsBeingMagneted);
+
+        // 더 줍을 아이템 있음?
+        if (personalItems.Count > 0)
+        {
+            currentPersonalItem = personalItems[0];
+            personalItems.RemoveAt(0);
+
+            if (currentPersonalItem != null && currentPersonalItem && !currentPersonalItem.IsBeingMagneted)
+            {
+                if (!currentPersonalItem.IsAnimating)
+                    currentPersonalItem.Reserve(unit);
+
+                unit.MoveTo(currentPersonalItem.transform.position);
+                SetBehaviorAndPriority(AIBehaviorState.PickingUpItem, TaskPriorityLevel.ItemPickup);
+                pickupTimer = 0f;
+                return;
+            }
+            else
+            {
+                currentPersonalItem = null;
+                TryPickupNextOrContinueLoop();
+                return;
+            }
+        }
+
+        // ★ 지속 명령이 있으면 루프 계속
+        if (bb.HasPersistentCommand)
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: 아이템 줍기 완료 → 루프 계속");
+            ContinuePersistentCommand();
+            return;
+        }
+
+        // 일반 복귀
+        ReturnToIdleOrWork();
+    }
+
+    /// <summary>
+    /// 일반 복귀 (지속 명령 없을 때)
+    /// </summary>
+    private void ReturnToIdleOrWork()
+    {
+        pendingMagnetItems.RemoveAll(item => item == null || !item);
+
+        // 인벤 꽉 차면 저장고로
+        if (unit.Inventory.IsFull)
+        {
+            StartDeliveryToStorage();
+            return;
+        }
+
+        // 대기 자석 아이템 처리
+        if (pendingMagnetItems.Count > 0)
+        {
+            if (HasAbsorbablePendingItems())
+            {
+                MoveToNearestAbsorbableItem();
+                return;
+            }
+            StartDeliveryToStorage();
+            return;
+        }
+
+        // 이전 작업 복귀
+        if (previousTask != null && TaskManager.Instance != null)
+        {
+            var task = previousTask;
+            previousTask = null;
+
+            if (task.State != PostedTaskState.Completed &&
+                task.State != PostedTaskState.Cancelled &&
+                TaskManager.Instance.TakeTask(task, unit))
+            {
+                AssignTask(task);
+                return;
+            }
+        }
+
+        // 새 작업 찾기
+        if (TryPullTask()) return;
+
+        // 인벤 비우기
+        if (!unit.Inventory.IsEmpty && ShouldDepositWhenIdle())
+        {
+            StartDeliveryToStorage();
+            return;
+        }
+
+        SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+    }
+
+    protected void GiveUpRemainingPersonalItems()
     {
         if (currentPersonalItem != null && currentPersonalItem)
             currentPersonalItem.OwnerGiveUp();
@@ -299,6 +402,8 @@ public partial class UnitAI
 
         unit.MoveTo(storagePosition);
         SetBehaviorAndPriority(AIBehaviorState.DeliveringToStorage, TaskPriorityLevel.ItemPickup);
+
+        Debug.Log($"[UnitAI] {unit.UnitName}: 저장고로 이동");
     }
 
     protected void UpdateWaitingForStorage()
@@ -343,7 +448,7 @@ public partial class UnitAI
             unit.Inventory.DepositToStorage();
             unit.OnDeliveryComplete();
             ClearDeliveryState();
-            ReturnToPreviousTaskOrIdle();
+            OnDeliveryComplete();
             return;
         }
 
@@ -357,7 +462,7 @@ public partial class UnitAI
             return;
         }
 
-        // ★ 도착했는데 범위 밖이면 다시 이동
+        // 도착했는데 범위 밖이면 다시 이동
         if (unit.HasArrivedAtDestination() && !isInRange)
         {
             unit.MoveTo(storagePosition);
@@ -373,7 +478,7 @@ public partial class UnitAI
             PerformDeposit();
             unit.OnDeliveryComplete();
             ClearDeliveryState();
-            ReturnToPreviousTaskOrIdle();
+            OnDeliveryComplete();
         }
     }
 
@@ -398,6 +503,23 @@ public partial class UnitAI
         }
     }
 
+    /// <summary>
+    /// ★ 배달 완료 시 지속 명령 루프로
+    /// </summary>
+    private void OnDeliveryComplete()
+    {
+        // ★ 지속 명령이 있으면 루프 계속
+        if (bb.HasPersistentCommand)
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: 저장 완료 → 루프 계속");
+            ContinuePersistentCommand();
+            return;
+        }
+
+        // 일반 복귀
+        ReturnToIdleOrWork();
+    }
+
     protected void ClearDeliveryState()
     {
         deliveryPhase = DeliveryPhase.None;
@@ -405,55 +527,19 @@ public partial class UnitAI
         depositTimer = 0f;
     }
 
+    /// <summary>
+    /// 기존 호환용 (지속 명령 없는 경우에만 사용)
+    /// </summary>
     protected void ReturnToPreviousTaskOrIdle()
     {
-        pendingMagnetItems.RemoveAll(item => item == null || !item);
-
-        // 인벤 꽉 차면 저장고로
-        if (unit.Inventory.IsFull)
+        // ★ 지속 명령이 있으면 루프 계속
+        if (bb.HasPersistentCommand)
         {
-            StartDeliveryToStorage();
+            ContinuePersistentCommand();
             return;
         }
 
-        // 대기 자석 아이템 처리
-        if (pendingMagnetItems.Count > 0)
-        {
-            if (HasAbsorbablePendingItems())
-            {
-                MoveToNearestAbsorbableItem();
-                return;
-            }
-            StartDeliveryToStorage();
-            return;
-        }
-
-        // 이전 작업 복귀
-        if (previousTask != null && TaskManager.Instance != null)
-        {
-            var task = previousTask;
-            previousTask = null;
-
-            if (task.State != PostedTaskState.Completed &&
-                task.State != PostedTaskState.Cancelled &&
-                TaskManager.Instance.TakeTask(task, unit))
-            {
-                AssignTask(task);
-                return;
-            }
-        }
-
-        // 새 작업 찾기
-        if (TryPullTask()) return;
-
-        // 인벤 비우기
-        if (!unit.Inventory.IsEmpty && ShouldDepositWhenIdle())
-        {
-            StartDeliveryToStorage();
-            return;
-        }
-
-        SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+        ReturnToIdleOrWork();
     }
 
     // ==================== Storage Helpers ====================

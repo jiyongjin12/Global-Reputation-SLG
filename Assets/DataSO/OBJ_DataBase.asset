@@ -37,8 +37,8 @@ MonoBehaviour:
   - <Name>k__BackingField: 1x1 Box
     <ID>k__BackingField: 1
     <Size>k__BackingField: {x: 1, y: 1}
-    <Type>k__BackingField: 2
-    <Category>k__BackingField: 0
+    <Type>k__BackingField: 7
+    <Category>k__BackingField: 2
     <Icon>k__BackingField: {fileID: 21300000, guid: 1d873c6f15219fc42a6f1f6e6b2b030f, type: 3}
     <Description>k__BackingField: 1x1  1x1  1x1  1x1  box  box  box  box
     <Prefab>k__BackingField: {fileID: 304060444072501163, guid: 5884f8195e1071c4495f129529d490bc, type: 3}
@@ -51,7 +51,7 @@ MonoBehaviour:
       <Amount>k__BackingField: 1
     <MaxUnitCapacity>k__BackingField: 4
     <ShowInBuildMenu>k__BackingField: 1
-    <WorkTaskType>k__BackingField: 0
+    <WorkTaskType>k__BackingField: 3
     <AvailableRecipes>k__BackingField: []
     <AutoProducedResource>k__BackingField: {fileID: 0}
     <ProductionInterval>k__BackingField: 10

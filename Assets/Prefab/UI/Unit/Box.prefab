@@ -583,7 +583,9 @@ MonoBehaviour:
   highColor: {r: 0.16464934, g: 0.9433962, b: 0.69108194, a: 1}
   midColor: {r: 1, g: 0.5098561, b: 0, a: 1}
   lowColor: {r: 0.6415094, g: 0.16037735, b: 0.16037735, a: 1}
-  slotButton: {fileID: 0}
+  hoverBorderColor: {r: 1, g: 1, b: 1, a: 0.5}
+  selectedBorderColor: {r: 1, g: 0, b: 0.059297085, a: 1}
+  doubleClickTime: 0.3
 --- !u!1 &5881692271373086909
 GameObject:
   m_ObjectHideFlags: 0

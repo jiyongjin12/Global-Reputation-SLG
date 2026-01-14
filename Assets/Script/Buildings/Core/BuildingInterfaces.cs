@@ -9,7 +9,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// 작업 가능한 건물 (Unit이 와서 작업할 수 있음)
-/// 예: 농경지, 작업장, 주방, 채석장
+/// 예: 농경지, 제작대, 주방
 /// </summary>
 public interface IWorkstation
 {
@@ -51,40 +51,6 @@ public interface IWorkstation
 
     /// <summary>작업 가능 상태 변경 이벤트</summary>
     event Action<IWorkstation> OnWorkAvailable;
-}
-
-/// <summary>
-/// 생산 가능한 건물 (레시피로 아이템 제작)
-/// 예: 작업장, 주방
-/// </summary>
-public interface IProducer
-{
-    /// <summary>현재 진행 중인 레시피</summary>
-    RecipeSO CurrentRecipe { get; }
-
-    /// <summary>작업 진행도 (0~1)</summary>
-    float Progress { get; }
-
-    /// <summary>대기 중인 레시피 큐</summary>
-    IReadOnlyList<RecipeSO> RecipeQueue { get; }
-
-    /// <summary>이 건물에서 만들 수 있는 레시피 목록</summary>
-    IReadOnlyList<RecipeSO> AvailableRecipes { get; }
-
-    /// <summary>레시피 큐에 추가</summary>
-    bool AddToQueue(RecipeSO recipe);
-
-    /// <summary>큐에서 제거</summary>
-    bool RemoveFromQueue(int index);
-
-    /// <summary>큐 클리어</summary>
-    void ClearQueue();
-
-    /// <summary>생산 완료 이벤트</summary>
-    event Action<IProducer, RecipeSO> OnProductionComplete;
-
-    /// <summary>큐 변경 이벤트</summary>
-    event Action<IProducer> OnQueueChanged;
 }
 
 /// <summary>
@@ -150,32 +116,7 @@ public interface IHarvestable
 }
 
 /// <summary>
-/// 자동 생산 건물 (일정 시간마다 자원 생성, 작업자 필요)
-/// 예: 채석장, 벌목장, 광산
-/// </summary>
-public interface IAutoProducer
-{
-    /// <summary>생산 간격 (초)</summary>
-    float ProductionInterval { get; }
-
-    /// <summary>다음 생산까지 남은 시간</summary>
-    float TimeUntilNextProduction { get; }
-
-    /// <summary>생산되는 자원</summary>
-    ResourceItemSO ProducedResource { get; }
-
-    /// <summary>1회 생산량</summary>
-    int ProductionAmount { get; }
-
-    /// <summary>작동 중인지</summary>
-    bool IsOperating { get; }
-
-    /// <summary>생산 완료 이벤트</summary>
-    event Action<IAutoProducer, ResourceItemSO, int> OnAutoProduced;
-}
-
-/// <summary>
-/// 상호작용 가능한 건물 (플레이어가 클릭해서 UI 열기)
+/// 상호작용 가능한 건물 (플레이어 클릭해서 UI 열기)
 /// </summary>
 public interface IInteractable
 {
@@ -195,11 +136,11 @@ public interface IInteractable
 public enum BuildingUIType
 {
     None,
-    Info,
-    Recipe,
-    Storage,
-    Farming,
-    Production,
+    Info,       // 정보만 표시
+    Recipe,     // 레시피 선택 (요리)
+    Storage,    // 저장소
+    Farming,    // 농경
+    Production, // 제작
 }
 
 /// <summary>
@@ -210,10 +151,10 @@ public enum WorkTaskType
     None,
     Farming,            // 농업
     Crafting,           // 제작
-    Cooking,            // 요리 
+    Cooking,            // 요리
     Mining,             // 채굴
     Woodcutting,        // 목공
-    Hauling,            // 운송?
+    Hauling,            // 운송
     Storing,            // 저장
 }
 

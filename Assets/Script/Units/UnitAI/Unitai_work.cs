@@ -1,7 +1,10 @@
 using UnityEngine;
 using UnityEngine.AI;
 
-
+/// <summary>
+/// 유닛 AI - 작업 관련
+/// ★ 작업 완료 시 ContinuePersistentCommand() 호출하여 루프 계속
+/// </summary>
 public partial class UnitAI
 {
     // ==================== Task Management ====================
@@ -13,6 +16,7 @@ public partial class UnitAI
         var task = TaskManager.Instance.FindNearestTask(unit);
         if (task == null) return false;
 
+        // 채집 작업 시 인벤토리 체크
         if (task.Data.Type == TaskType.Harvest && !CanAcceptHarvestTask(task))
             return false;
 
@@ -119,6 +123,9 @@ public partial class UnitAI
         MoveToTaskPosition(task.Data.TargetPosition, AIBehaviorState.Working, TaskPriorityLevel.FreeWill);
     }
 
+    /// <summary>
+    /// 공통 이동 로직
+    /// </summary>
     private void MoveToTaskPosition(Vector3 position, AIBehaviorState behavior, TaskPriorityLevel priority)
     {
         taskContext.SetMoving(position);
@@ -208,9 +215,9 @@ public partial class UnitAI
             return;
         }
 
+        // 도착했는데 거리가 멀면 다시 이동 시도
         if (unit.HasArrivedAtDestination() || agent.velocity.magnitude < 0.1f)
         {
-            // NavMesh 
             if (NavMesh.SamplePosition(taskContext.WorkPosition, out NavMeshHit hit, 2f, NavMesh.AllAreas))
             {
                 unit.MoveTo(hit.position);
@@ -262,12 +269,14 @@ public partial class UnitAI
             return;
         }
 
+        // 작업 시작
         if (!isWorkstationWorkStarted && currentWorkstation.CanStartWork)
         {
             currentWorkstation.StartWork();
             isWorkstationWorkStarted = true;
         }
 
+        // 작업 수행
         taskContext.WorkTimer += Time.deltaTime;
         if (taskContext.WorkTimer >= 1f)
         {
@@ -276,19 +285,28 @@ public partial class UnitAI
             currentWorkstation.DoWork(workAmount);
         }
 
-        var wsComponent = currentWorkstation as WorkstationComponent;
-        if (wsComponent != null && !wsComponent.IsWorking && isWorkstationWorkStarted)
+        // 완료 체크: 더 이상 할 일이 없고 작업이 시작되었다면
+        if (isWorkstationWorkStarted && !currentWorkstation.CanStartWork)
         {
+            // 다음 작업이 있으면 계속
             if (currentWorkstation.CanStartWork)
             {
                 isWorkstationWorkStarted = false;
             }
             else
             {
+                // 완전히 완료
                 currentWorkstation.ReleaseWorker();
                 TaskManager.Instance?.CompleteTask(taskContext.Task);
                 CompleteCurrentTask();
             }
+        }
+
+        // 워커가 해제되었다면 완료 (외부에서 해제된 경우)
+        if (!currentWorkstation.IsOccupied && isWorkstationWorkStarted)
+        {
+            TaskManager.Instance?.CompleteTask(taskContext.Task);
+            CompleteCurrentTask();
         }
     }
 
@@ -316,12 +334,15 @@ public partial class UnitAI
         }
     }
 
+    /// <summary>
+    /// 건설 수행 - 완료 시 지속 명령 처리
+    /// </summary>
     private void PerformConstruction(PostedTask task)
     {
         var building = task.Owner as Building;
         if (building == null || building.CurrentState == BuildingState.Completed)
         {
-            CompleteCurrentTask();
+            OnWorkComplete(task);
             return;
         }
 
@@ -329,29 +350,33 @@ public partial class UnitAI
         if (building.DoConstructionWork(work))
         {
             TaskManager.Instance?.CompleteTask(task);
-            CompleteCurrentTask();
+            OnWorkComplete(task);
         }
     }
 
+    /// <summary>
+    /// ★ 채집 수행
+    /// </summary>
     private void PerformHarvest(PostedTask task)
     {
         var node = task.Owner as ResourceNode;
         if (node == null || node.IsDepleted)
         {
-            CompleteCurrentTask();
-            TryPickupPersonalItems();
+            // 노드 고갈 → 작업 완료
+            OnWorkComplete(task);
             return;
         }
 
-        
+        // 인벤토리 공간 체크 (채집 전)
         ResourceItemSO nodeResource = GetNodeResource(node);
-        if (nodeResource != null && ShouldDepositInventory(nodeResource))
+        if (unit.Inventory.IsFull || (nodeResource != null && !unit.Inventory.CanAddAny(nodeResource)))
         {
-            previousTask = task;
+            // 인벤 가득 → 작업 중단하고 루프로
+            Debug.Log($"[UnitAI] {unit.UnitName}: 채집 중 인벤 가득 → 루프로");
             TaskManager.Instance?.LeaveTask(task, unit);
             taskContext.Clear();
             bb.CurrentTask = null;
-            StartDeliveryToStorage();
+            ContinuePersistentCommand();
             return;
         }
 
@@ -365,9 +390,7 @@ public partial class UnitAI
 
         if (node.IsDepleted)
         {
-            previousTask = task;
-            CompleteCurrentTask();
-            TryPickupPersonalItems();
+            OnWorkComplete(task);
         }
     }
 
@@ -381,11 +404,48 @@ public partial class UnitAI
         return null;
     }
 
+    // ==================== ★ 작업 완료 처리 ====================
+
+    /// <summary>
+    /// ★ 작업 완료 시 지속 명령 루프로 복귀
+    /// </summary>
+    private void OnWorkComplete(PostedTask task)
+    {
+        // 워크스테이션 정리
+        if (currentWorkstation != null)
+        {
+            currentWorkstation.ReleaseWorker();
+            currentWorkstation = null;
+            isWorkstationWorkStarted = false;
+        }
+
+        if (task != null)
+        {
+            TaskManager.Instance?.LeaveTask(task, unit);
+        }
+
+        taskContext.Clear();
+        bb.CurrentTask = null;
+        bb.TargetObject = null;
+        bb.TargetPosition = null;
+        pickupTimer = 0f;
+
+        // ★ 지속 명령이 있으면 루프 계속
+        if (bb.HasPersistentCommand)
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: 작업 완료 → 루프 계속");
+            ContinuePersistentCommand();
+            return;
+        }
+
+        SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
+    }
+
     // ==================== Task Completion ====================
 
     protected void CompleteCurrentTask()
     {
-        // 워크스테이션 
+        // 워크스테이션 정리
         if (currentWorkstation != null)
         {
             currentWorkstation.ReleaseWorker();
@@ -403,6 +463,13 @@ public partial class UnitAI
         bb.TargetObject = null;
         bb.TargetPosition = null;
         pickupTimer = 0f;
+
+        // ★ 지속 명령이 있으면 루프 계속
+        if (bb.HasPersistentCommand)
+        {
+            ContinuePersistentCommand();
+            return;
+        }
 
         SetBehaviorAndPriority(AIBehaviorState.Idle, TaskPriorityLevel.FreeWill);
     }

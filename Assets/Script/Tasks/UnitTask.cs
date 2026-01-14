@@ -16,7 +16,7 @@ public enum TaskType
     Eat,
     Attack,
     Flee,
-    Workstation  // ★ 추가: 워크스테이션 작업
+    Workstation  // 워크스테이션 작업
 }
 
 /// <summary>
@@ -465,7 +465,7 @@ public class IdleWaitTask : UnitTask
     }
 }
 
-// ==================== ★ 워크스테이션 작업 추가 ====================
+// ==================== 워크스테이션 작업 ====================
 
 /// <summary>
 /// 워크스테이션 작업 (농경지, 작업장, 주방 등)
@@ -548,13 +548,12 @@ public class WorkstationTask : UnitTask
         if (workstation == null)
             return true;
 
-        // 작업 완료 체크
-        if (!workstation.CanStartWork && !workstation.IsOccupied)
+        // 작업 완료 체크: 더 이상 할 일이 없고 작업이 시작되었다면
+        if (!workstation.CanStartWork && isWorkStarted)
             return true;
 
-        // 작업 중이 아니면 완료
-        var component = workstation as WorkstationComponent;
-        if (component != null && !component.IsWorking && isWorkStarted)
+        // 워커가 해제되었다면 완료
+        if (!workstation.IsOccupied && isWorkStarted)
             return true;
 
         return false;

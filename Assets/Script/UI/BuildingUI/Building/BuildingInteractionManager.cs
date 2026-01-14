@@ -10,10 +10,8 @@ public class BuildingInteractionManager : MonoBehaviour
     public static BuildingInteractionManager Instance { get; private set; }
 
     [Header("=== UI 참조 (선택적) ===")]
-    [SerializeField] private GameObject recipeSelectionUI;
     [SerializeField] private GameObject storageUI;
     [SerializeField] private GameObject farmingUI;
-    [SerializeField] private GameObject productionUI;
     [SerializeField] private GameObject buildingInfoUI;
 
     [Header("=== 현재 상태 ===")]
@@ -23,10 +21,9 @@ public class BuildingInteractionManager : MonoBehaviour
     // 이벤트
     public event Action<Building> OnBuildingSelected;
     public event Action OnBuildingDeselected;
-    public event Action<IProducer> OnProducerUIRequested;
+    public event Action<CraftingBuildingComponent> OnCraftingUIRequested;
     public event Action<IStorage> OnStorageUIRequested;
     public event Action<FarmlandComponent> OnFarmingUIRequested;
-    public event Action<IAutoProducer> OnProductionUIRequested;
 
     public Building CurrentBuilding => currentBuilding;
     public bool IsUIOpen => isUIOpen;
@@ -39,7 +36,7 @@ public class BuildingInteractionManager : MonoBehaviour
         }
         else
         {
-            Destroy(this);  // 컴포넌트만 삭제 (GameObject는 유지)
+            Destroy(this);
             return;
         }
     }
@@ -79,17 +76,18 @@ public class BuildingInteractionManager : MonoBehaviour
 
     // ==================== UI 열기 ====================
 
-    public void OpenProducerUI(IProducer producer)
+    /// <summary>제작/요리 UI 열기</summary>
+    public void OpenCraftingUI(CraftingBuildingComponent craftingBuilding)
     {
+        if (craftingBuilding == null) return;
+
         isUIOpen = true;
-        OnProducerUIRequested?.Invoke(producer);
+        OnCraftingUIRequested?.Invoke(craftingBuilding);
 
-        if (recipeSelectionUI != null)
-        {
-            recipeSelectionUI.SetActive(true);
-        }
+        // CraftingUI 사용
+        CraftingUI.Instance?.Open(craftingBuilding);
 
-        Debug.Log($"[BuildingInteraction] Producer UI 열림 (레시피 {producer.AvailableRecipes?.Count ?? 0}개)");
+        Debug.Log($"[BuildingInteraction] Crafting UI 열림 (타입: {craftingBuilding.BuildingType})");
     }
 
     public void OpenStorageUI(IStorage storage)
@@ -118,19 +116,6 @@ public class BuildingInteractionManager : MonoBehaviour
         Debug.Log($"[BuildingInteraction] Farming UI 열림 (상태: {farmland.GetStateString()})");
     }
 
-    public void OpenProductionUI(IAutoProducer autoProducer)
-    {
-        isUIOpen = true;
-        OnProductionUIRequested?.Invoke(autoProducer);
-
-        if (productionUI != null)
-        {
-            productionUI.SetActive(true);
-        }
-
-        Debug.Log($"[BuildingInteraction] Production UI 열림 (생산물: {autoProducer.ProducedResource?.ResourceName})");
-    }
-
     public void OpenBuildingInfoUI(Building building)
     {
         isUIOpen = true;
@@ -146,11 +131,12 @@ public class BuildingInteractionManager : MonoBehaviour
     /// <summary>현재 UI 닫기</summary>
     public void CloseCurrentUI()
     {
-        if (recipeSelectionUI != null) recipeSelectionUI.SetActive(false);
         if (storageUI != null) storageUI.SetActive(false);
         if (farmingUI != null) farmingUI.SetActive(false);
-        if (productionUI != null) productionUI.SetActive(false);
         if (buildingInfoUI != null) buildingInfoUI.SetActive(false);
+
+        // CraftingUI도 닫기
+        CraftingUI.Instance?.Close();
 
         isUIOpen = false;
     }

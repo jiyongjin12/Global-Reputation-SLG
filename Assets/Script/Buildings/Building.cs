@@ -20,11 +20,10 @@ public class Building : MonoBehaviour
 
     // 캐시된 컴포넌트
     private IWorkstation _workstation;
-    private IProducer _producer;
     private IStorage _storage;
     private IHarvestable _harvestable;
-    private IAutoProducer _autoProducer;
     private IInteractable _interactable;
+    private CraftingBuildingComponent _craftingBuilding;
 
     public event Action<Building> OnConstructionComplete;
     public event Action<Building, float> OnConstructionProgress;
@@ -38,25 +37,23 @@ public class Building : MonoBehaviour
     public float ConstructionProgress => data != null && data.ConstructionWorkRequired > 0
         ? currentConstructionWork / data.ConstructionWorkRequired : 1f;
 
-    // 새 Properties
+    // Transform Properties
     public Transform WorkPoint => workPoint;
     public Transform DropPoint => dropPoint;
 
     // 컴포넌트 접근
     public IWorkstation Workstation => _workstation;
-    public IProducer Producer => _producer;
     public IStorage Storage => _storage;
     public IHarvestable Harvestable => _harvestable;
-    public IAutoProducer AutoProducer => _autoProducer;
     public IInteractable Interactable => _interactable;
+    public CraftingBuildingComponent CraftingBuilding => _craftingBuilding;
 
     // 기능 체크
     public bool HasWorkstation => _workstation != null;
-    public bool HasProducer => _producer != null;
     public bool HasStorage => _storage != null;
     public bool HasHarvestable => _harvestable != null;
-    public bool HasAutoProducer => _autoProducer != null;
     public bool IsInteractable => _interactable != null;
+    public bool HasCraftingBuilding => _craftingBuilding != null;
 
     private void Awake()
     {
@@ -67,11 +64,10 @@ public class Building : MonoBehaviour
     private void CacheComponents()
     {
         _workstation = GetComponent<IWorkstation>();
-        _producer = GetComponent<IProducer>();
         _storage = GetComponent<IStorage>();
         _harvestable = GetComponent<IHarvestable>();
-        _autoProducer = GetComponent<IAutoProducer>();
         _interactable = GetComponent<IInteractable>();
+        _craftingBuilding = GetComponent<CraftingBuildingComponent>();
     }
 
     private void EnsureRequiredPoints()
@@ -105,7 +101,6 @@ public class Building : MonoBehaviour
         GridPosition = gridPos;
         isInitialized = true;
 
-        // 컴포넌트 캐시 (Awake 전에 Initialize 호출될 경우 대비)
         if (_workstation == null)
             CacheComponents();
 
@@ -138,7 +133,7 @@ public class Building : MonoBehaviour
         {
             if (unit != null && unit.IsAlive)
             {
-                var unitAI = unit.GetComponent<UnitAI>();  // ★ 수정: UnitAi → UnitAI
+                var unitAI = unit.GetComponent<UnitAI>();
                 if (unitAI != null)
                 {
                     unitAI.UpdateAssignedWorkPosition(newWorldPosition, size);
@@ -205,7 +200,6 @@ public class Building : MonoBehaviour
             constructionTask = null;
         }
 
-        // BuildingManager에 등록
         BuildingManager.Instance?.RegisterBuilding(this);
 
         OnConstructionComplete?.Invoke(this);
@@ -233,7 +227,6 @@ public class Building : MonoBehaviour
         if (constructionTask != null)
             TaskManager.Instance?.CancelTask(constructionTask);
 
-        // BuildingManager에서 제거
         BuildingManager.Instance?.UnregisterBuilding(this);
 
         GridDataManager.Instance?.RemoveObject(GridPosition);
@@ -245,7 +238,6 @@ public class Building : MonoBehaviour
         if (constructionTask != null)
             TaskManager.Instance?.CancelTask(constructionTask);
 
-        // BuildingManager에서 제거
         BuildingManager.Instance?.UnregisterBuilding(this);
     }
 

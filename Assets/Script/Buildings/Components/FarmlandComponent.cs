@@ -7,7 +7,7 @@ using System.Collections.Generic;
 /// - 씨앗 심기 → 성장 → 수확 사이클
 /// - Unit이 심고/수확하러 옴
 /// </summary>
-public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractable
+public class FarmlandComponent : MonoBehaviour, IWorkstation, IHarvestable, IInteractable
 {
     [Header("=== 농경 설정 ===")]
     [SerializeField] private float growthTime = 60f;
@@ -18,6 +18,9 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
 
     [Header("=== 드롭 설정 ===")]
     [SerializeField] private GameObject droppedItemPrefab;
+
+    [Header("=== 작업 지점 ===")]
+    [SerializeField] private Transform workPoint;
 
     [Header("=== 작물 비주얼 ===")]
     [SerializeField] private Transform cropVisualParent;
@@ -32,6 +35,17 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
     // 내부 상태
     private GameObject currentCropVisual;
     private ResourceItemSO pendingCrop;
+    private Unit currentWorker;
+    private float workProgress;
+    private bool isWorkStarted;
+    private Building building;
+
+    // IWorkstation 구현
+    public bool IsOccupied => currentWorker != null;
+    public Transform WorkPoint => workPoint;
+    public Unit CurrentWorker => currentWorker;
+    public bool CanStartWork => !IsOccupied && HasPendingWork();
+    public WorkTaskType TaskType => WorkTaskType.Farming;
 
     // IHarvestable 구현
     public bool IsReadyToHarvest => isReadyToHarvest;
@@ -42,18 +56,25 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
     public bool CanInteract => true;
     public BuildingUIType UIType => BuildingUIType.Farming;
 
-    // 이벤트
+    // IWorkstation 이벤트
+    public event Action<IWorkstation> OnWorkCompleted;
+    public event Action<IWorkstation> OnWorkAvailable;
+
+    // IHarvestable 이벤트
     public event Action<IHarvestable> OnReadyToHarvest;
     public event Action<IHarvestable> OnPlanted;
+
+    // 추가 이벤트
     public event Action<FarmlandComponent> OnHarvested;
     public event Action<FarmlandComponent> OnStateChanged;
 
     public FarmState State => farmState;
 
-    protected override void Awake()
+    private void Awake()
     {
-        base.Awake();
-        taskType = WorkTaskType.Farming;
+        building = GetComponent<Building>();
+        if (workPoint == null && building != null)
+            workPoint = building.WorkPoint;
     }
 
     private void Update()
@@ -64,12 +85,84 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
         }
     }
 
+    // ==================== IWorkstation 구현 ====================
+
+    public bool AssignWorker(Unit worker)
+    {
+        if (worker == null || IsOccupied) return false;
+        currentWorker = worker;
+        return true;
+    }
+
+    public void ReleaseWorker()
+    {
+        currentWorker = null;
+        workProgress = 0f;
+        isWorkStarted = false;
+    }
+
+    public void StartWork()
+    {
+        if (!HasPendingWork()) return;
+
+        isWorkStarted = true;
+        workProgress = 0f;
+
+        if (farmState == FarmState.WaitingForPlant)
+            Debug.Log($"[Farmland] 심기 시작: {pendingCrop?.ResourceName}");
+        else if (farmState == FarmState.ReadyToHarvest)
+            Debug.Log($"[Farmland] 수확 시작: {currentCrop?.ResourceName}");
+    }
+
+    public float DoWork(float workAmount)
+    {
+        if (!isWorkStarted) StartWork();
+
+        float workTime = GetWorkTime();
+        workProgress += workAmount / workTime;
+
+        if (workProgress >= 1f)
+        {
+            CompleteWork();
+        }
+
+        return workAmount;
+    }
+
+    public void CompleteWork()
+    {
+        if (farmState == FarmState.WaitingForPlant && pendingCrop != null)
+        {
+            currentCrop = pendingCrop;
+            pendingCrop = null;
+            growthProgress = 0f;
+            farmState = FarmState.Growing;
+
+            UpdateCropVisual();
+            Debug.Log($"[Farmland] 심기 완료: {currentCrop.ResourceName}");
+            OnPlanted?.Invoke(this);
+        }
+        else if (farmState == FarmState.ReadyToHarvest)
+        {
+            Harvest();
+        }
+
+        ReleaseWorker();
+        OnWorkCompleted?.Invoke(this);
+        OnStateChanged?.Invoke(this);
+    }
+
+    public void CancelWork()
+    {
+        isWorkStarted = false;
+        workProgress = 0f;
+    }
+
     // ==================== IHarvestable 구현 ====================
 
     public bool Plant(ResourceItemSO seed)
     {
-        if (seed == null)
-            return false;
+        if (seed == null) return false;
 
         if (farmState != FarmState.Empty)
         {
@@ -91,7 +184,7 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
         Debug.Log($"[Farmland] 심기 대기: {seed.ResourceName}");
 
         OnStateChanged?.Invoke(this);
-        NotifyWorkAvailable();
+        OnWorkAvailable?.Invoke(this);
 
         return true;
     }
@@ -125,7 +218,6 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
         Debug.Log($"[Farmland] 수확 완료: {currentCrop.ResourceName} x{harvestAmount}");
 
         ResetFarmland();
-
         OnHarvested?.Invoke(this);
 
         return harvested;
@@ -138,53 +230,16 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
         BuildingInteractionManager.Instance?.OpenFarmingUI(this);
     }
 
-    // ==================== WorkstationComponent 오버라이드 ====================
+    // ==================== 헬퍼 ====================
 
-    public override bool CanStartWork => !isOccupied && HasPendingWork();
-
-    protected override bool HasPendingWork()
+    private bool HasPendingWork()
     {
         return farmState == FarmState.WaitingForPlant || farmState == FarmState.ReadyToHarvest;
     }
 
-    protected override float GetWorkTime()
+    private float GetWorkTime()
     {
         return farmState == FarmState.WaitingForPlant ? plantWorkTime : harvestWorkTime;
-    }
-
-    protected override void OnWorkStarted()
-    {
-        if (farmState == FarmState.WaitingForPlant)
-        {
-            Debug.Log($"[Farmland] 심기 시작: {pendingCrop?.ResourceName}");
-        }
-        else if (farmState == FarmState.ReadyToHarvest)
-        {
-            Debug.Log($"[Farmland] 수확 시작: {currentCrop?.ResourceName}");
-        }
-    }
-
-    protected override void OnWorkFinished()
-    {
-        if (farmState == FarmState.WaitingForPlant && pendingCrop != null)
-        {
-            currentCrop = pendingCrop;
-            pendingCrop = null;
-            growthProgress = 0f;
-            farmState = FarmState.Growing;
-
-            UpdateCropVisual();
-
-            Debug.Log($"[Farmland] 심기 완료: {currentCrop.ResourceName}");
-
-            OnPlanted?.Invoke(this);
-        }
-        else if (farmState == FarmState.ReadyToHarvest)
-        {
-            Harvest();
-        }
-
-        OnStateChanged?.Invoke(this);
     }
 
     // ==================== 성장 처리 ====================
@@ -212,7 +267,7 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
 
             OnReadyToHarvest?.Invoke(this);
             OnStateChanged?.Invoke(this);
-            NotifyWorkAvailable();
+            OnWorkAvailable?.Invoke(this);
         }
     }
 
@@ -266,7 +321,7 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
             return;
         }
 
-        NotifyWorkAvailable();
+        OnWorkAvailable?.Invoke(this);
     }
 
     public string GetStateString()
@@ -282,10 +337,8 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
     }
 
 #if UNITY_EDITOR
-    protected override void OnDrawGizmosSelected()
+    private void OnDrawGizmosSelected()
     {
-        base.OnDrawGizmosSelected();
-
         Gizmos.color = farmState switch
         {
             FarmState.Empty => Color.gray,
@@ -296,6 +349,12 @@ public class FarmlandComponent : WorkstationComponent, IHarvestable, IInteractab
         };
 
         Gizmos.DrawWireCube(transform.position + Vector3.up * 0.5f, new Vector3(1, 0.1f, 1));
+
+        if (workPoint != null)
+        {
+            Gizmos.color = Color.blue;
+            Gizmos.DrawWireSphere(workPoint.position, 0.3f);
+        }
     }
 #endif
 }

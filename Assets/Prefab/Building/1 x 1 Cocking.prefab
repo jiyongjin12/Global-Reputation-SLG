@@ -9,9 +9,9 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3842876329729495910}
-  - component: {fileID: 6352267834917113290}
-  m_Layer: 0
-  m_Name: 1 x 1 Box
+  - component: {fileID: 5738451726973745756}
+  m_Layer: 9
+  m_Name: 1 x 1 Cocking
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -33,7 +33,7 @@ Transform:
   - {fileID: 7291031020729306741}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &6352267834917113290
+--- !u!114 &5738451726973745756
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -42,16 +42,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 304060444072501163}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 64f8a7ce4763173418759205f1ae75dc, type: 3}
+  m_Script: {fileID: 11500000, guid: 24c3b5b315263834d8786083bf4ec16f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  taskType: 3
-  baseWorkTime: 5
+  buildingType: Cooking
+  maxQueueSize: 6
   workPoint: {fileID: 7291031020729306741}
-  isOccupied: 0
-  isWorking: 0
-  workProgress: 0
-  currentWorkDone: 0
+  availableRecipes:
+  - {fileID: 11400000, guid: b3e2aafb73cd9f84d95575395ea2fee5, type: 2}
+  craftingQueue: []
+  currentWorker: {fileID: 0}
+  commandTimestamp: 0
 --- !u!1 &1179826893272600297
 GameObject:
   m_ObjectHideFlags: 0
@@ -64,7 +65,7 @@ GameObject:
   - component: {fileID: 1760216137836138146}
   - component: {fileID: 4976161037704319467}
   - component: {fileID: 2432761356111456788}
-  m_Layer: 0
+  m_Layer: 9
   m_Name: Cube
   m_TagString: Untagged
   m_Icon: {fileID: 0}

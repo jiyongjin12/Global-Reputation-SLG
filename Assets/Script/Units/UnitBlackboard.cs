@@ -14,7 +14,7 @@ public class UnitBlackboard
     // 니즈 (모두 높을수록 좋음)
     [Range(0, 100)] public float Hunger = 100f;
     [Range(0, 100)] public float Loyalty = 100f;
-    [Range(0, 100)] public float MentalHealth = 100f;  // 정신력 (높을수록 좋음)
+    [Range(0, 100)] public float MentalHealth = 100f;
 
     // 레벨
     public int Level = 1;
@@ -29,6 +29,9 @@ public class UnitBlackboard
     // 플레이어 명령
     public bool HasPlayerCommand;
     public UnitCommand PlayerCommand;
+
+    // ★ 지속 명령 (Persistent Command)
+    public PersistentCommand PersistentCmd;
 
     // 감지된 정보
     public DroppedItem NearestFood;
@@ -53,13 +56,14 @@ public class UnitBlackboard
     public bool IsHungry => Hunger < 30f;
     public bool IsStarving => Hunger <= 0f;
     public bool IsDisloyal => Loyalty < 50f;
-    public bool IsMentallyUnstable => MentalHealth < 20f;   // 심각한 정신 상태
-    public bool IsMentallyStressed => MentalHealth < 50f;   // 스트레스 받는 상태
+    public bool IsMentallyUnstable => MentalHealth < 20f;
+    public bool IsMentallyStressed => MentalHealth < 50f;
     public bool IsIdle => CurrentState == UnitState.Idle && CurrentTask == null && !HasPlayerCommand;
     public bool CanSocialize => Time.time - LastSocialInteractionTime >= SocialCooldown;
-
-    // ★ 수면 상태 체크
     public bool IsSleeping => CurrentState == UnitState.Sleeping;
+
+    // ★ 지속 명령 활성 여부
+    public bool HasPersistentCommand => PersistentCmd != null && PersistentCmd.IsActive;
 
     /// <summary>
     /// 명령 무시 확률 (50 이상: 0%, 49: 10%, 0: 25%)
@@ -131,6 +135,23 @@ public class UnitBlackboard
 
     public void EndSocialInteraction() => InteractionTarget = null;
 
+    // ★ 지속 명령 설정
+    public void SetPersistentCommand(PersistentCommandType type, ResourceNodeType? nodeType = null, float searchRadius = 50f)
+    {
+        PersistentCmd = new PersistentCommand(type, nodeType, searchRadius);
+        Debug.Log($"[Blackboard] 지속 명령 설정: {type}" + (nodeType.HasValue ? $" ({nodeType.Value})" : ""));
+    }
+
+    // ★ 지속 명령 해제
+    public void ClearPersistentCommand()
+    {
+        if (PersistentCmd != null)
+        {
+            Debug.Log($"[Blackboard] 지속 명령 해제: {PersistentCmd.Type}");
+            PersistentCmd = null;
+        }
+    }
+
     public void Reset()
     {
         IsAlive = true;
@@ -144,6 +165,7 @@ public class UnitBlackboard
         CurrentTask = null;
         HasPlayerCommand = false;
         PlayerCommand = null;
+        PersistentCmd = null;
         InteractionTarget = null;
         LastSocialInteractionTime = -100f;
     }
@@ -167,3 +189,34 @@ public class UnitCommand
 }
 
 public enum UnitCommandType { MoveTo, Attack, Construct, Harvest, Stop }
+
+/// <summary>
+/// ★ 지속 명령 타입
+/// </summary>
+public enum PersistentCommandType
+{
+    None,
+    Harvest,    // 채집 (특정 자원 타입)
+    Construct,  // 건설 (모든 미완성 건물)
+    Attack      // 공격 (모든 적)
+}
+
+/// <summary>
+/// ★ 지속 명령 데이터
+/// </summary>
+[Serializable]
+public class PersistentCommand
+{
+    public PersistentCommandType Type;
+    public ResourceNodeType? TargetNodeType;  // 채집 시 자원 타입
+    public float SearchRadius;
+    public bool IsActive;
+
+    public PersistentCommand(PersistentCommandType type, ResourceNodeType? nodeType = null, float searchRadius = 50f)
+    {
+        Type = type;
+        TargetNodeType = nodeType;
+        SearchRadius = searchRadius;
+        IsActive = type != PersistentCommandType.None;
+    }
+}
