@@ -16,15 +16,19 @@ MonoBehaviour:
   - <Name>k__BackingField: 1x1 Floor
     <ID>k__BackingField: 0
     <Size>k__BackingField: {x: 1, y: 1}
-    <Type>k__BackingField: 0
+    <Type>k__BackingField: 2
     <Category>k__BackingField: 0
     <Icon>k__BackingField: {fileID: 21300000, guid: 1d873c6f15219fc42a6f1f6e6b2b030f, type: 3}
-    <Description>k__BackingField: 
+    <Description>k__BackingField: "\uCE68 \uB418"
     <Prefab>k__BackingField: {fileID: 4465201454902286896, guid: 3ff972cf182922d44a893ced6357c915, type: 3}
-    <BlueprintPrefab>k__BackingField: {fileID: 0}
-    <ConstructionWorkRequired>k__BackingField: 0
-    <ConstructionCosts>k__BackingField: []
-    <MaxUnitCapacity>k__BackingField: 0
+    <BlueprintPrefab>k__BackingField: {fileID: 6308579638950253088, guid: f2615be15e81ba349854ae6c08f7f760, type: 3}
+    <ConstructionWorkRequired>k__BackingField: 20
+    <ConstructionCosts>k__BackingField:
+    - <Resource>k__BackingField: {fileID: 11400000, guid: 7697bfbb38c55c64fbefa1841da44f9a, type: 2}
+      <Amount>k__BackingField: 10
+    - <Resource>k__BackingField: {fileID: 11400000, guid: 07793162378ff2347ba23d12b899f785, type: 2}
+      <Amount>k__BackingField: 5
+    <MaxUnitCapacity>k__BackingField: 2
     <ShowInBuildMenu>k__BackingField: 1
     <WorkTaskType>k__BackingField: 0
     <AvailableRecipes>k__BackingField: []

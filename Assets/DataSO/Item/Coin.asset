@@ -10,14 +10,14 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e750cfb82cb14b048b52f39d3ef4917e, type: 3}
-  m_Name: Stone
+  m_Name: Coin
   m_EditorClassIdentifier: 
-  <ResourceName>k__BackingField: Stone
-  <ID>k__BackingField: 2
-  <Category>k__BackingField: 2
-  <Description>k__BackingField: "\uAE30\uBCF8 \uC790\uC6D0"
-  <Icon>k__BackingField: {fileID: 21300000, guid: c2386c874db395a40893fd425837913d, type: 3}
-  <DropPrefab>k__BackingField: {fileID: 8039310647319555218, guid: 934afd7be4856554c8cc1bcb8d7fd2ce, type: 3}
+  <ResourceName>k__BackingField: Coin
+  <ID>k__BackingField: 0
+  <Category>k__BackingField: 0
+  <Description>k__BackingField: "\uB3C8\uB3C8\uB3C8"
+  <Icon>k__BackingField: {fileID: 21300000, guid: 165605fcd94a3e341880dbd00d34a87d, type: 3}
+  <DropPrefab>k__BackingField: {fileID: 5705030408001920902, guid: ccf0b10b68937cf40b14a8caa5f0f326, type: 3}
   <MaxStackSize>k__BackingField: 99
   <BaseValue>k__BackingField: 1
   <NutritionValue>k__BackingField: 0

@@ -7,6 +7,7 @@ public class GameInitializer : MonoBehaviour
     public ResourceItemSO wood;
     public ResourceItemSO stone;
     public ResourceItemSO food;
+    public ResourceItemSO coin;
 
     [Header("=== 유닛 스폰 위치 ===")]
     public Transform spawnPoint;
@@ -19,6 +20,7 @@ public class GameInitializer : MonoBehaviour
             ResourceManager.Instance.AddResource(wood, 50);
             ResourceManager.Instance.AddResource(stone, 30);
             ResourceManager.Instance.AddResource(food, 15);
+            ResourceManager.Instance.AddResource(coin, 10);
         }
 
         // 테스트 유닛 생성

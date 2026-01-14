@@ -13,7 +13,12 @@ MonoBehaviour:
   m_Name: Wood
   m_EditorClassIdentifier: 
   <ResourceName>k__BackingField: Wood
-  <ID>k__BackingField: 0
+  <ID>k__BackingField: 1
+  <Category>k__BackingField: 2
+  <Description>k__BackingField: "\uAE30\uBCF8 \uC790\uC6D0"
   <Icon>k__BackingField: {fileID: 21300000, guid: a0a53bdf831f041449b14c6ee7385d1a, type: 3}
   <DropPrefab>k__BackingField: {fileID: 5705030408001920902, guid: ece6f7c36704d8b4184ca3885024c4c7, type: 3}
-  <Description>k__BackingField: "\uAE30\uBCF8 \uC790\uC6D0"
+  <MaxStackSize>k__BackingField: 99
+  <BaseValue>k__BackingField: 1
+  <NutritionValue>k__BackingField: 0
+  <HealthRestore>k__BackingField: 0

@@ -58,6 +58,9 @@ public class UnitBlackboard
     public bool IsIdle => CurrentState == UnitState.Idle && CurrentTask == null && !HasPlayerCommand;
     public bool CanSocialize => Time.time - LastSocialInteractionTime >= SocialCooldown;
 
+    // ★ 수면 상태 체크
+    public bool IsSleeping => CurrentState == UnitState.Sleeping;
+
     /// <summary>
     /// 명령 무시 확률 (50 이상: 0%, 49: 10%, 0: 25%)
     /// </summary>

@@ -61,6 +61,9 @@ public class UnitCommandUI : MonoBehaviour, IEscapableUI
     private List<UnitCommandOption> currentOptions = new();
     private Stack<CommandMenuData> menuStack = new();
 
+    // ★ 명령 실행 여부 플래그
+    private bool commandExecuted = false;
+
     // 이벤트
     public event Action OnPanelOpened;
     public event Action OnPanelClosed;
@@ -138,6 +141,7 @@ public class UnitCommandUI : MonoBehaviour, IEscapableUI
 
         currentUnit = unit;
         isOpen = true;
+        commandExecuted = false;  // ★ 초기화
         menuStack.Clear();
 
         mainPanel.SetActive(true);
@@ -191,14 +195,27 @@ public class UnitCommandUI : MonoBehaviour, IEscapableUI
             CameraController.Instance.StopFollowUnit();
         }
 
-        // 유닛 명령 취소
-        if (UnitSelectionManager.Instance != null)
+        // ★ 명령이 내려지지 않았을 때만 취소 처리
+        if (!commandExecuted)
         {
-            UnitSelectionManager.Instance.CancelUnitCommand();
+            if (UnitSelectionManager.Instance != null)
+            {
+                UnitSelectionManager.Instance.CancelUnitCommand();
+            }
+        }
+        else
+        {
+            // 명령이 내려진 경우, 선택만 해제 (AI는 명령 실행 중)
+            if (UnitSelectionManager.Instance != null)
+            {
+                UnitSelectionManager.Instance.DeselectUnit();
+            }
         }
 
+        // 초기화
         currentUnit = null;
         menuStack.Clear();
+        commandExecuted = false;
 
         OnPanelClosed?.Invoke();
         Debug.Log("[UnitCommandUI] 닫힘");
@@ -280,6 +297,8 @@ public class UnitCommandUI : MonoBehaviour, IEscapableUI
 
         // TODO: 쓰다듬기 애니메이션, 이펙트, 사운드
 
+        // ★ 쓰다듬기는 명령이 아니라 즉시 효과이므로, 명령 취소로 처리
+        // commandExecuted = false 상태로 Close() → AI 자유 행동 복귀
         Close();
     }
 
@@ -322,7 +341,11 @@ public class UnitCommandUI : MonoBehaviour, IEscapableUI
         Debug.Log($"[UnitCommandUI] 돌 캐기 명령 - {currentUnit.UnitName}");
 
         // 플레이어 명령으로 돌 채집 지시
-        GiveHarvestCommand(ResourceNodeType.Rock);  // Rock = 돌
+        if (GiveHarvestCommand(ResourceNodeType.Rock))
+        {
+            commandExecuted = true;  // ★ 명령 성공
+        }
+
         Close();
     }
 
@@ -336,16 +359,21 @@ public class UnitCommandUI : MonoBehaviour, IEscapableUI
         Debug.Log($"[UnitCommandUI] 나무 캐기 명령 - {currentUnit.UnitName}");
 
         // 플레이어 명령으로 나무 채집 지시
-        GiveHarvestCommand(ResourceNodeType.Tree);  // Tree = 나무
+        if (GiveHarvestCommand(ResourceNodeType.Tree))
+        {
+            commandExecuted = true;  // ★ 명령 성공
+        }
+
         Close();
     }
 
     /// <summary>
     /// 채집 명령 전달 (플레이어 명령 - 최우선순위)
     /// </summary>
-    private void GiveHarvestCommand(ResourceNodeType resourceType)
+    /// <returns>명령 성공 여부</returns>
+    private bool GiveHarvestCommand(ResourceNodeType resourceType)
     {
-        if (currentUnit == null) return;
+        if (currentUnit == null) return false;
 
         // 가장 가까운 해당 타입 자원 노드 찾기
         ResourceNode nearestNode = FindNearestResourceNode(resourceType);
@@ -354,7 +382,7 @@ public class UnitCommandUI : MonoBehaviour, IEscapableUI
         {
             Debug.LogWarning($"[UnitCommandUI] {resourceType} 자원 노드를 찾을 수 없습니다.");
             ShowNotImplementedMessage($"{resourceType} 자원이 근처에 없습니다.");
-            return;
+            return false;
         }
 
         // Blackboard에 플레이어 명령 설정
@@ -368,9 +396,10 @@ public class UnitCommandUI : MonoBehaviour, IEscapableUI
             );
 
             Debug.Log($"[UnitCommandUI] {currentUnit.UnitName}: {resourceType} 채집 명령 (플레이어 명령)");
+            return true;
         }
 
-        // UnitAI가 알아서 플레이어 명령 처리
+        return false;
     }
 
     /// <summary>

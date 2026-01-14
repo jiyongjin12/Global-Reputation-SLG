@@ -65,11 +65,31 @@ public class UnitSelectionManager : MonoBehaviour
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
             return;
 
+        // ★ 명령 UI가 열려있으면 Unit 클릭 무시
+        if (IsAnyCommandUIOpen())
+            return;
+
         // 왼쪽 클릭
         if (Input.GetMouseButtonDown(0))
         {
             TrySelectUnit();
         }
+    }
+
+    /// <summary>
+    /// ★ 명령 관련 UI가 열려있는지 체크
+    /// </summary>
+    private bool IsAnyCommandUIOpen()
+    {
+        // UnitCommandUI 열려있으면 클릭 무시
+        if (UnitCommandUI.Instance != null && UnitCommandUI.Instance.IsOpen)
+            return true;
+
+        // 다른 UI들도 체크 (필요시 추가)
+        // if (InventoryUI.Instance != null && InventoryUI.Instance.IsOpen) return true;
+        // if (BuildingUIManager.Instance != null && BuildingUIManager.Instance.IsOpen) return true;
+
+        return false;
     }
 
     /// <summary>
@@ -121,16 +141,11 @@ public class UnitSelectionManager : MonoBehaviour
     {
         if (unit == null) return;
 
-        // 현재 작업 중단
-        unit.StopAllActions();
-
-        // Blackboard 상태 초기화
-        if (unit.Blackboard != null)
+        // ★ UnitAI에게 명령 대기 상태 설정
+        var ai = unit.GetComponent<UnitAI>();
+        if (ai != null)
         {
-            unit.Blackboard.CurrentTask = null;
-            unit.Blackboard.HasPlayerCommand = false;
-            unit.Blackboard.PlayerCommand = null;
-            unit.Blackboard.SetState(UnitState.Idle);
+            ai.SetWaitingForCommand(true);
         }
 
         // 이동 중지
@@ -141,16 +156,24 @@ public class UnitSelectionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 유닛 명령 취소 시 (ESC 등)
+    /// 유닛 명령 취소 시 (ESC, UI 닫힘 등)
     /// </summary>
     public void CancelUnitCommand()
     {
         if (selectedUnit != null)
         {
-            // 명령 대기 상태 해제, 다시 자유 행동
+            // ★ 명령 대기 해제 → AI 자유 행동 복귀
+            var ai = selectedUnit.GetComponent<UnitAI>();
+            if (ai != null)
+            {
+                ai.SetWaitingForCommand(false);
+            }
+
+            // Blackboard 명령 초기화
             if (selectedUnit.Blackboard != null)
             {
                 selectedUnit.Blackboard.HasPlayerCommand = false;
+                selectedUnit.Blackboard.PlayerCommand = null;
             }
 
             if (showDebugLogs)
@@ -218,6 +241,7 @@ public class UnitSelectionManager : MonoBehaviour
         if (unit == null) return;
 
         SelectUnit(unit);
+        SetUnitToCommandWaitState(unit);
 
         if (UnitCommandUI.Instance != null)
         {

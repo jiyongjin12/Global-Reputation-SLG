@@ -33,7 +33,7 @@ public class TaskManager : MonoBehaviour
         if (Instance == null)
             Instance = this;
         else
-            Destroy(this);  // 컴포넌트만 삭제 (GameObject는 유지)
+            Destroy(this);
     }
 
     private void Update()
@@ -116,11 +116,8 @@ public class TaskManager : MonoBehaviour
         return posted;
     }
 
-    // ==================== ★ 워크스테이션 작업 등록 ====================
+    // ==================== 워크스테이션 작업 등록 ====================
 
-    /// <summary>
-    /// 워크스테이션 작업 등록 (건물 컴포넌트에서 호출)
-    /// </summary>
     public PostedTask AddWorkstationTask(IWorkstation workstation)
     {
         if (workstation == null || !workstation.CanStartWork)
@@ -222,7 +219,7 @@ public class TaskManager : MonoBehaviour
     }
 
     /// <summary>
-    /// ★ 가장 가까운 적합한 작업 찾기 (작업 타입 우선순위 적용)
+    /// 가장 가까운 적합한 작업 찾기 (작업 타입 우선순위 적용)
     /// ★ 우선순위: 건설 > 워크스테이션 > 아이템 > 채집
     /// </summary>
     public PostedTask FindNearestTask(Unit unit, TaskType[] preferredTypes = null)
@@ -230,9 +227,7 @@ public class TaskManager : MonoBehaviour
         List<PostedTask> constructUnassigned = new();
         List<PostedTask> constructCooperable = new();
         List<PostedTask> workstationUnassigned = new();
-        List<PostedTask> workstationCooperable = new();
-        List<PostedTask> pickupUnassigned = new();
-        List<PostedTask> pickupCooperable = new();
+        List<PostedTask> itemUnassigned = new();
         List<PostedTask> harvestUnassigned = new();
         List<PostedTask> harvestCooperable = new();
 
@@ -242,51 +237,82 @@ public class TaskManager : MonoBehaviour
             if (availability == TaskAvailability.NotAvailable)
                 continue;
 
-            bool isUnassigned = (availability == TaskAvailability.Unassigned);
-
             switch (posted.Data.Type)
             {
                 case TaskType.Construct:
-                    if (isUnassigned) constructUnassigned.Add(posted);
-                    else constructCooperable.Add(posted);
+                    if (availability == TaskAvailability.Unassigned)
+                        constructUnassigned.Add(posted);
+                    else
+                        constructCooperable.Add(posted);
                     break;
                 case TaskType.Workstation:
-                    if (isUnassigned) workstationUnassigned.Add(posted);
-                    else workstationCooperable.Add(posted);
+                    if (availability == TaskAvailability.Unassigned)
+                        workstationUnassigned.Add(posted);
                     break;
                 case TaskType.PickupItem:
-                    if (isUnassigned) pickupUnassigned.Add(posted);
-                    else pickupCooperable.Add(posted);
+                    if (availability == TaskAvailability.Unassigned)
+                        itemUnassigned.Add(posted);
                     break;
                 case TaskType.Harvest:
-                    if (isUnassigned) harvestUnassigned.Add(posted);
-                    else harvestCooperable.Add(posted);
+                    if (availability == TaskAvailability.Unassigned)
+                        harvestUnassigned.Add(posted);
+                    else
+                        harvestCooperable.Add(posted);
                     break;
             }
         }
 
-        var result = FindNearestInList(constructUnassigned, unit)
-                  ?? FindNearestInList(constructCooperable, unit);
+        // 우선순위별로 찾기
+        PostedTask result = FindNearestInList(unit, constructUnassigned);
         if (result != null) return result;
 
-        result = FindNearestInList(workstationUnassigned, unit)
-              ?? FindNearestInList(workstationCooperable, unit);
+        result = FindNearestInList(unit, constructCooperable);
         if (result != null) return result;
 
-        result = FindNearestInList(pickupUnassigned, unit)
-              ?? FindNearestInList(pickupCooperable, unit);
+        result = FindNearestInList(unit, workstationUnassigned);
         if (result != null) return result;
 
-        result = FindNearestInList(harvestUnassigned, unit)
-              ?? FindNearestInList(harvestCooperable, unit);
+        result = FindNearestInList(unit, itemUnassigned);
+        if (result != null) return result;
+
+        result = FindNearestInList(unit, harvestUnassigned);
+        if (result != null) return result;
+
+        result = FindNearestInList(unit, harvestCooperable);
         if (result != null) return result;
 
         return null;
     }
 
-    private PostedTask FindNearestInList(List<PostedTask> tasks, Unit unit)
+    /// <summary>
+    /// ★ 플레이어 명령용 작업 찾기 (타입 제한 없음)
+    /// </summary>
+    public PostedTask FindTaskForPlayerCommand(Unit unit, TaskType targetType, GameObject targetObject)
     {
-        if (tasks == null || tasks.Count == 0) return null;
+        foreach (var posted in postedTasks)
+        {
+            if (posted.State == PostedTaskState.Completed ||
+                posted.State == PostedTaskState.Cancelled)
+                continue;
+
+            if (posted.Data.Type != targetType)
+                continue;
+
+            if (targetObject != null && posted.Data.TargetObject != targetObject)
+                continue;
+
+            if (posted.CurrentWorkers >= posted.Data.MaxWorkers)
+                continue;
+
+            return posted;
+        }
+
+        return null;
+    }
+
+    private PostedTask FindNearestInList(Unit unit, List<PostedTask> tasks)
+    {
+        if (tasks.Count == 0) return null;
 
         PostedTask nearest = null;
         float nearestDist = float.MaxValue;
@@ -340,12 +366,22 @@ public class TaskManager : MonoBehaviour
         return GetTaskAvailability(posted, unit, preferredTypes) != TaskAvailability.NotAvailable;
     }
 
-    public bool TakeTask(PostedTask task, Unit unit)
+    /// <summary>
+    /// 작업 수락
+    /// </summary>
+    /// <param name="task">수락할 작업</param>
+    /// <param name="unit">작업을 수행할 유닛</param>
+    /// <param name="isPlayerCommand">★ 플레이어 명령인지 여부 (true면 타입 제한 무시)</param>
+    public bool TakeTask(PostedTask task, Unit unit, bool isPlayerCommand = false)
     {
         if (task == null || task.State == PostedTaskState.Cancelled)
             return false;
 
         if (task.CurrentWorkers >= task.Data.MaxWorkers)
+            return false;
+
+        // ★ 플레이어 명령이 아닐 때만 타입 체크
+        if (!isPlayerCommand && !CanUnitDoTask(unit, task.Data))
             return false;
 
         task.AssignedUnits.Add(unit);
@@ -359,7 +395,10 @@ public class TaskManager : MonoBehaviour
         OnTaskTaken?.Invoke(task);
 
         if (showDebugLogs)
-            Debug.Log($"[TaskManager] {unit.UnitName} 작업 수락: {task.Data.Type}");
+        {
+            string cmdStr = isPlayerCommand ? " (플레이어 명령)" : "";
+            Debug.Log($"[TaskManager] {unit.UnitName} 작업 수락: {task.Data.Type}{cmdStr}");
+        }
 
         return true;
     }
@@ -423,18 +462,28 @@ public class TaskManager : MonoBehaviour
 
     // ==================== 유틸리티 ====================
 
+    /// <summary>
+    /// 자동 작업 시 유닛 타입 체크
+    /// ★ Fighter: 자동으로 채집 안 함, 하지만 건설은 함
+    /// </summary>
     private bool CanUnitDoTask(Unit unit, TaskData data)
     {
         switch (data.Type)
         {
-            case TaskType.Construct:
             case TaskType.Harvest:
             case TaskType.PickupItem:
             case TaskType.DeliverToStorage:
-            case TaskType.Workstation:  // ★ 추가
+            case TaskType.Workstation:
+                // Worker만 자동으로 이 작업들 수행
                 return unit.Type == UnitType.Worker;
+
+            case TaskType.Construct:
+                // ★ 건설은 모든 타입 가능
+                return true;
+
             case TaskType.Attack:
                 return unit.Type == UnitType.Fighter;
+
             default:
                 return true;
         }

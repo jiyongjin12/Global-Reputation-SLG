@@ -23,7 +23,8 @@ public enum UnitState
     Eating,
     Fighting,
     Fleeing,
-    Socializing
+    Socializing,
+    Sleeping    // ★ 추가
 }
 
 /// <summary>
@@ -62,10 +63,10 @@ public class Unit : MonoBehaviour
     [Header("=== 니즈 ===")]
     [SerializeField, Range(0, 100)] private float hunger = 100f;
     [SerializeField, Range(0, 100)] private float loyalty = 100f;
-    [SerializeField, Range(0, 100)] private float mentalHealth = 100f;  // 정신력 (높을수록 좋음)
+    [SerializeField, Range(0, 100)] private float mentalHealth = 100f;
 
     [Header("=== 전투 스탯 ===")]
-    [SerializeField] private float baseAttackSpeed = 1f;  // 공격 속도
+    [SerializeField] private float baseAttackSpeed = 1f;
 
     [Header("=== 특성 ===")]
     [SerializeField] private List<UnitTraitSO> traits = new();
@@ -78,11 +79,14 @@ public class Unit : MonoBehaviour
     private NavMeshAgent agent;
     private UnitMovement movement;
 
+    // ★ 침대 참조
+    private BedComponent assignedBed;
+
     // ==================== Blackboard ====================
 
     public UnitBlackboard Blackboard { get; private set; }
 
-    // 호환성용 레거시 스탯
+    // 호환성용 레가시 스탯
     public UnitStats Stats => _legacyStats;
     private UnitStats _legacyStats;
 
@@ -111,7 +115,7 @@ public class Unit : MonoBehaviour
     public float ExpToNextLevel => expToNextLevel;
     public float Hunger => hunger;
     public float Loyalty => loyalty;
-    public float MentalHealth => mentalHealth;  // 정신력
+    public float MentalHealth => mentalHealth;
     public float AttackSpeed => baseAttackSpeed * GetTraitMultiplier(UnitStatType.AttackSpeed);
     public UnitInventory Inventory => inventory;
     public List<UnitTraitSO> Traits => traits;
@@ -122,9 +126,13 @@ public class Unit : MonoBehaviour
     public bool IsHungry => hunger < 30f;
     public bool IsStarving => hunger <= 0f;
     public bool IsDisloyal => loyalty < 50f;
-    public bool IsMentallyUnstable => mentalHealth < 20f;  // 정신력 불안정
-    public bool IsMentallyStressed => mentalHealth < 50f;  // 정신력 스트레스
+    public bool IsMentallyUnstable => mentalHealth < 20f;
+    public bool IsMentallyStressed => mentalHealth < 50f;
     public UnitTask CurrentTask => null;
+
+    // ★ 침대 관련 Properties
+    public BedComponent AssignedBed => assignedBed;
+    public bool HasBed => assignedBed != null;
 
     // ==================== Events ====================
 
@@ -266,10 +274,8 @@ public class Unit : MonoBehaviour
     /// </summary>
     public void StopAllActions()
     {
-        // 이동 중지
         StopMoving();
 
-        // Blackboard 초기화
         if (Blackboard != null)
         {
             Blackboard.TargetPosition = null;
@@ -280,7 +286,6 @@ public class Unit : MonoBehaviour
             Blackboard.SetState(UnitState.Idle);
         }
 
-        // UnitAI에게 작업 중단 알림
         var unitAI = GetComponent<UnitAI>();
         if (unitAI != null)
         {
@@ -326,6 +331,14 @@ public class Unit : MonoBehaviour
     {
         Blackboard.IsAlive = false;
         inventory.DropAllItems();
+
+        // ★ 침대 해제
+        if (assignedBed != null)
+        {
+            assignedBed.RemoveOwner();
+            assignedBed = null;
+        }
+
         OnUnitDeath?.Invoke(this);
         Destroy(gameObject);
     }
@@ -410,7 +423,6 @@ public class Unit : MonoBehaviour
     {
         GainExpFromAction(ExpGainAction.Harvest);
 
-        // 기본 채집력 * 타입 효율 * 일반 특성 * 노드별 특성
         float result = baseGatherPower;
         result *= GetGatherEfficiency();
         result *= GetTraitMultiplier(UnitStatType.GatherPower);
@@ -437,11 +449,6 @@ public class Unit : MonoBehaviour
     public float DoAttack(GameObject target)
     {
         float damage = DoAttack();
-
-        // 사냥꾼 특성: 동물에게 추가 데미지 (향후 구현)
-        // if (target.CompareTag("Animal"))
-        //     damage *= GetTraitMultiplier(UnitStatType.AttackPower, targetType);
-
         Debug.Log($"[Unit] {unitName} 공격! 데미지: {damage:F1} (타입: {unitType})");
         return damage;
     }
@@ -451,8 +458,7 @@ public class Unit : MonoBehaviour
     /// </summary>
     public float CalculateIncomingDamage(float rawDamage)
     {
-        // Defender 특성 등 적용
-        float defenseMultiplier = GetTraitMultiplier(UnitStatType.MaxHP); // 임시로 MaxHP 사용
+        float defenseMultiplier = GetTraitMultiplier(UnitStatType.MaxHP);
         return rawDamage * defenseMultiplier;
     }
 
@@ -464,6 +470,26 @@ public class Unit : MonoBehaviour
     public bool ShouldIgnoreCommand() => Blackboard.ShouldIgnoreCommand();
     public float GetCommandIgnoreChance() => Blackboard.CommandIgnoreChance;
 
+    // ==================== ★ 침대 시스템 ====================
+
+    /// <summary>
+    /// 침대 배정 (BedComponent에서 호출)
+    /// </summary>
+    public void AssignBed(BedComponent bed)
+    {
+        assignedBed = bed;
+        Debug.Log($"[Unit] {unitName}: 침대 배정됨");
+    }
+
+    /// <summary>
+    /// 침대 해제 (BedComponent에서 호출)
+    /// </summary>
+    public void RemoveBed()
+    {
+        assignedBed = null;
+        Debug.Log($"[Unit] {unitName}: 침대 해제됨");
+    }
+
     // ==================== Traits ====================
 
     private void ApplyTraits()
@@ -472,7 +498,6 @@ public class Unit : MonoBehaviour
         {
             foreach (var effect in trait.Effects)
             {
-                // 조건 없는 효과만 영구 적용 (이동 속도 등)
                 if (!effect.HasNodeTypeCondition)
                 {
                     ApplyStatModifier(effect.AffectedStat, effect.Multiplier);
@@ -487,7 +512,6 @@ public class Unit : MonoBehaviour
         switch (stat)
         {
             case UnitStatType.MoveSpeed: moveSpeed *= multiplier; break;
-                // WorkSpeed, GatherPower, AttackPower는 실시간 계산
         }
     }
 
@@ -504,12 +528,10 @@ public class Unit : MonoBehaviour
             {
                 if (effect.AffectedStat != statType) continue;
 
-                // 조건 없는 효과
                 if (!effect.HasNodeTypeCondition)
                 {
                     multiplier *= effect.Multiplier;
                 }
-                // 노드 타입 조건이 있고, 해당 노드 타입과 일치
                 else if (nodeType.HasValue && effect.TargetNodeType == nodeType.Value)
                 {
                     multiplier *= effect.Multiplier;
@@ -529,7 +551,6 @@ public class Unit : MonoBehaviour
 
         traits.Add(trait);
 
-        // 즉시 적용되는 효과만 적용
         foreach (var effect in trait.Effects)
         {
             if (!effect.HasNodeTypeCondition)
@@ -546,7 +567,6 @@ public class Unit : MonoBehaviour
     {
         if (trait == null || !traits.Contains(trait)) return;
 
-        // 역으로 효과 제거
         foreach (var effect in trait.Effects)
         {
             if (!effect.HasNodeTypeCondition && effect.Multiplier != 0)
@@ -598,6 +618,7 @@ public class Unit : MonoBehaviour
         $"배고픔: {hunger:F0} | 충성도: {loyalty:F0} | 정신력: {mentalHealth:F0}\n" +
         $"채집력: {GatherPower:F2} (기본 {baseGatherPower} × {GetGatherEfficiency():F2})\n" +
         $"공격력: {AttackPower:F2} (기본 {baseAttackPower} × {GetCombatEfficiency():F2})\n" +
+        $"침대: {(HasBed ? assignedBed.name : "없음")}\n" +
         $"특성: {traits.Count}개";
 
     // 호환용
