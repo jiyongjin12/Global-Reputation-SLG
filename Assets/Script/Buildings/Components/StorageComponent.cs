@@ -177,9 +177,71 @@ public class StorageComponent : MonoBehaviour, IStorage, IInteractable
         return items;
     }
 
+    /// <summary>
+    /// 저장소에서 음식 아이템 정보 가져오기 (제거하지 않음)
+    /// </summary>
     public StoredResource GetFoodItem()
     {
-        return storedItems.FirstOrDefault(s => s.Item != null && s.Item.IsFood);
+        return storedItems.FirstOrDefault(s => s.Item != null && s.Item.IsFood && s.Amount > 0);
+    }
+
+    /// <summary>
+    /// ★ 저장소에서 음식 꺼내기 (실제로 제거)
+    /// </summary>
+    /// <param name="amount">꺼낼 수량 (기본 1)</param>
+    /// <returns>꺼낸 음식 아이템 정보 (없으면 null)</returns>
+    public ResourceItemSO TakeFoodItem(int amount = 1)
+    {
+        var foodStored = GetFoodItem();
+        if (foodStored == null || foodStored.Item == null)
+            return null;
+
+        // 수량 조정
+        int takeAmount = Mathf.Min(amount, foodStored.Amount);
+        if (takeAmount <= 0) return null;
+
+        // 제거
+        ResourceItemSO foodItem = foodStored.Item;
+        RemoveItem(foodItem, takeAmount);
+
+        Debug.Log($"[Storage] 음식 꺼냄: {foodItem.ResourceName} x{takeAmount}");
+
+        return foodItem;
+    }
+
+    /// <summary>
+    /// ★ 특정 종류의 음식 꺼내기
+    /// </summary>
+    public ResourceItemSO TakeSpecificFood(ResourceItemSO foodType, int amount = 1)
+    {
+        if (foodType == null || !foodType.IsFood)
+            return null;
+
+        if (!HasItem(foodType, amount))
+            return null;
+
+        RemoveItem(foodType, amount);
+        return foodType;
+    }
+
+    /// <summary>
+    /// ★ 음식 총 수량 확인
+    /// </summary>
+    public int GetTotalFoodCount()
+    {
+        return storedItems
+            .Where(s => s.Item != null && s.Item.IsFood)
+            .Sum(s => s.Amount);
+    }
+
+    /// <summary>
+    /// ★ 모든 음식 종류 가져오기
+    /// </summary>
+    public List<StoredResource> GetAllFoodItems()
+    {
+        return storedItems
+            .Where(s => s.Item != null && s.Item.IsFood && s.Amount > 0)
+            .ToList();
     }
 
     private void SyncWithResourceManager()

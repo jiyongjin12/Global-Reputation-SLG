@@ -31,9 +31,6 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
     [SerializeField] private Transform workPoint;
     [SerializeField] private Transform dropPoint;              // 아이템 드롭 위치
 
-    [Header("=== 드롭 아이템 ===")]
-    [SerializeField] private GameObject droppedItemPrefab;     // DroppedItem 프리팹
-
     [Header("=== 레시피 목록 ===")]
     [SerializeField] private List<RecipeSO> availableRecipes = new();
 
@@ -225,9 +222,14 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
         OnWorkCompleted?.Invoke(this);
 
         if (craftingQueue.Count > 0)
+        {
             StartWork();
+        }
         else
+        {
+            // 대기열 비었으면 Worker 해제 (UnitAI가 IsOccupied 체크로 감지)
             ReleaseWorker();
+        }
     }
 
     /// <summary>
@@ -236,13 +238,6 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
     private void SpawnDroppedItems(RecipeSO recipe)
     {
         if (recipe.Outputs == null || recipe.Outputs.Length == 0) return;
-        if (droppedItemPrefab == null)
-        {
-            Debug.LogWarning("[CraftingBuilding] DroppedItem 프리팹이 설정되지 않음!");
-            // 프리팹 없으면 기존 방식으로 인벤토리에 추가
-            recipe.ProduceToInventory();
-            return;
-        }
 
         Vector3 spawnPos = dropPoint != null ? dropPoint.position : transform.position;
 
@@ -250,18 +245,29 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
         {
             if (output.Item == null) continue;
 
+            // ResourceItemSO에서 Prefab 가져오기
+            GameObject prefab = output.Item.DropPrefab;
+            if (prefab == null)
+            {
+                Debug.LogWarning($"[CraftingBuilding] {output.Item.ResourceName}의 Prefab이 없음!");
+                continue;
+            }
+
             // 드롭할 수량 계산 (MinAmount ~ MaxAmount 사이 랜덤)
             int amount = UnityEngine.Random.Range(output.MinAmount, output.MaxAmount + 1);
             if (amount <= 0) continue;
 
             // DroppedItem 생성
-            GameObject droppedObj = Instantiate(droppedItemPrefab, spawnPos, Quaternion.identity);
+            GameObject droppedObj = Instantiate(prefab, spawnPos, Quaternion.identity);
             DroppedItem droppedItem = droppedObj.GetComponent<DroppedItem>();
 
             if (droppedItem != null)
             {
                 droppedItem.Initialize(output.Item, amount);
                 droppedItem.PlayDropAnimation(spawnPos);
+
+                // ★ TaskManager에 등록하여 유닛들이 줍도록
+                TaskManager.Instance?.AddPickupItemTask(droppedItem);
 
                 Debug.Log($"[CraftingBuilding] 아이템 드롭: {output.Item.ResourceName} x{amount}");
             }

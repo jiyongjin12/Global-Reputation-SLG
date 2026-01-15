@@ -188,6 +188,7 @@ public partial class UnitAI
 
     private void UpdateWorkingAtStation()
     {
+        // ★ null 체크 먼저
         if (currentWorkstation == null)
         {
             CompleteCurrentTask();
@@ -231,6 +232,13 @@ public partial class UnitAI
 
     private void UpdateMovingToWorkstation()
     {
+        // ★ null 체크
+        if (currentWorkstation == null)
+        {
+            CompleteCurrentTask();
+            return;
+        }
+
         float dist = Vector3.Distance(transform.position, taskContext.WorkPosition);
 
         if (dist <= workRadius)
@@ -261,8 +269,12 @@ public partial class UnitAI
         }
     }
 
+    /// <summary>
+    /// ★ Workstation 작업 실행 - 안전한 null 체크 추가
+    /// </summary>
     private void UpdateExecutingWorkstation()
     {
+        // ★ 매번 null 체크
         if (currentWorkstation == null)
         {
             CompleteCurrentTask();
@@ -282,29 +294,35 @@ public partial class UnitAI
         {
             taskContext.WorkTimer = 0f;
             float workAmount = unit.DoWork();
-            currentWorkstation.DoWork(workAmount);
+
+            // ★ DoWork 전에 참조 저장 (DoWork 내부에서 상태 변경될 수 있음)
+            var workstation = currentWorkstation;
+            if (workstation != null)
+            {
+                workstation.DoWork(workAmount);
+            }
         }
 
-        // 완료 체크: 더 이상 할 일이 없고 작업이 시작되었다면
-        if (isWorkstationWorkStarted && !currentWorkstation.CanStartWork)
+        // ★ DoWork 후 다시 null 체크 (DoWork 내부에서 완료되어 해제될 수 있음)
+        if (currentWorkstation == null)
         {
-            // 다음 작업이 있으면 계속
-            if (currentWorkstation.CanStartWork)
-            {
-                isWorkstationWorkStarted = false;
-            }
-            else
-            {
-                // 완전히 완료
-                currentWorkstation.ReleaseWorker();
-                TaskManager.Instance?.CompleteTask(taskContext.Task);
-                CompleteCurrentTask();
-            }
+            CompleteCurrentTask();
+            return;
         }
 
         // 워커가 해제되었다면 완료 (외부에서 해제된 경우)
         if (!currentWorkstation.IsOccupied && isWorkstationWorkStarted)
         {
+            TaskManager.Instance?.CompleteTask(taskContext.Task);
+            CompleteCurrentTask();
+            return;
+        }
+
+        // 완료 체크: 더 이상 할 일이 없고 작업이 시작되었다면
+        if (isWorkstationWorkStarted && !currentWorkstation.CanStartWork)
+        {
+            // 완전히 완료
+            currentWorkstation.ReleaseWorker();
             TaskManager.Instance?.CompleteTask(taskContext.Task);
             CompleteCurrentTask();
         }
@@ -476,6 +494,9 @@ public partial class UnitAI
 
     protected void InterruptCurrentTask()
     {
+        // ★ 음식 찾기 취소
+        CancelSeekingFood();
+
         if (currentWorkstation != null)
         {
             currentWorkstation.CancelWork();

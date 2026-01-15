@@ -48,6 +48,8 @@ MonoBehaviour:
   buildingType: Cooking
   maxQueueSize: 6
   workPoint: {fileID: 7291031020729306741}
+  dropPoint: {fileID: 7291031020729306741}
+  droppedItemPrefab: {fileID: 0}
   availableRecipes:
   - {fileID: 11400000, guid: b3e2aafb73cd9f84d95575395ea2fee5, type: 2}
   craftingQueue: []

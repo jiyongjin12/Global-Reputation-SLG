@@ -559,8 +559,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dd95b99428666284db33d7a5f3dd1142, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  iconImage: {fileID: 346987346753884707}
-  backgroundImage: {fileID: 346987346753884707}
+  iconImage: {fileID: 7458008934466551099}
+  backgroundImage: {fileID: 5308755056960476355}
   countText: {fileID: 5236225644167825623}
   progressFill: {fileID: 0}
   selectedOutline: {fileID: 1967105077457908207}

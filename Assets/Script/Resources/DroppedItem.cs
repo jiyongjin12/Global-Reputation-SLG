@@ -9,6 +9,7 @@ using UnityEngine;
 /// - 자석 흡수는 옵션 (특성용)
 /// - 소유권 시스템: 채집한 유닛이 우선 줍기
 /// - ★ 부분 흡수: 인벤토리 공간만큼만 흡수, 나머지는 땅에 남음
+/// - ★ 음식 소비: ConsumeAmount로 일부만 소비 가능
 /// </summary>
 public class DroppedItem : MonoBehaviour
 {
@@ -104,8 +105,8 @@ public class DroppedItem : MonoBehaviour
     public bool IsReserved => isReserved;
     public Unit ReservedBy => reservedBy;
     public bool IsAnimating => isAnimating;
-    public bool IsBeingMagneted => isBeingMagneted;  // ★ 추가
-    public bool IsBeingCarried => isBeingCarried;    // ★ 추가
+    public bool IsBeingMagneted => isBeingMagneted;
+    public bool IsBeingCarried => isBeingCarried;
 
     // 소유권 Properties
     public Unit Owner => owner;
@@ -114,7 +115,7 @@ public class DroppedItem : MonoBehaviour
     // 이벤트
     public event Action<DroppedItem> OnPickedUp;
     public event Action<DroppedItem> OnAnimationComplete;
-    public event Action<DroppedItem> OnBecamePublic;  // 공용 전환 시
+    public event Action<DroppedItem> OnBecamePublic;
 
     private void Awake()
     {
@@ -133,7 +134,6 @@ public class DroppedItem : MonoBehaviour
                 BecomePublic();
             }
         }
-        // ★ 자동 흡수 로직 없음 - Unit이 PlayAbsorbAnimation을 호출해야만 흡수됨
     }
 
     public void Initialize(ResourceItemSO resourceItem, int itemAmount)
@@ -267,125 +267,62 @@ public class DroppedItem : MonoBehaviour
             {
                 velocity.y -= gravity * Time.deltaTime;
                 position += velocity * Time.deltaTime;
-                velocity.x *= 0.99f;
-                velocity.z *= 0.99f;
+
+                // 속도 기반 스케일
+                float speedFactor = Mathf.Abs(velocity.y) / launchHeight;
+                float squash = 1f - speedFactor * (1f - maxSquashAmount) * 0.3f;
+                transform.localScale = new Vector3(
+                    originalScale.x * (2f - squash),
+                    originalScale.y * squash,
+                    originalScale.z * (2f - squash)
+                );
 
                 transform.position = position;
-
-                // 속도에 따른 스케일 (떨어질 때 납작)
-                UpdateScaleByVelocity(velocity.y);
-
                 yield return null;
             }
 
-            // 바닥 도착 → 최대 스쿼시!
+            // 바닥 충돌
             position.y = groundY;
             transform.position = position;
-            ApplyImpactSquash();
+
+            // 바운스 효과
+            float impactSpeed = Mathf.Abs(velocity.y);
+
+            if (impactSpeed < minBounceVelocity)
+                break;
+
+            // 충돌 스퀘시
+            float impactSquash = Mathf.Lerp(1f, maxSquashAmount, impactSpeed / launchHeight);
+            transform.localScale = new Vector3(
+                originalScale.x * (2f - impactSquash),
+                originalScale.y * impactSquash,
+                originalScale.z * (2f - impactSquash)
+            );
 
             yield return new WaitForSeconds(0.03f);
 
-            bounceCount++;
+            // 복원
+            transform.localScale = originalScale;
 
             // 바운스
-            velocity.y = -velocity.y * bounceDecay;
+            velocity.y = impactSpeed * bounceDecay;
+            velocity.x *= 0.8f;
+            velocity.z *= 0.8f;
 
-            if (Mathf.Abs(velocity.y) < minBounceVelocity)
-                break;
-
-            // 상승
-            while (velocity.y > 0 || position.y > groundY)
-            {
-                velocity.y -= gravity * Time.deltaTime;
-                position += velocity * Time.deltaTime;
-                velocity.x *= 0.99f;
-                velocity.z *= 0.99f;
-
-                transform.position = position;
-
-                // 속도에 따른 스케일
-                UpdateScaleByVelocity(velocity.y);
-
-                // 다시 바닥에 닿으면 다음 바운스
-                if (position.y <= groundY && velocity.y <= 0)
-                    break;
-
-                yield return null;
-            }
+            bounceCount++;
         }
 
-        // ========== 3단계: 정지 ==========
+        // 바닥에 안착
         position.y = groundY;
         transform.position = position;
         transform.localScale = originalScale;
 
         isAnimating = false;
-
-        // ★ 바닥 튕기기 완료 - 자동 흡수 비활성화
-        // Unit이 RequestMagnetAbsorb()를 호출할 때만 흡수됨
-        // isReadyForMagnet는 Unit 호출 시에만 true가 됨
-
         OnAnimationComplete?.Invoke(this);
     }
 
     /// <summary>
-    /// 속도 기반 탄성 스케일
-    /// </summary>
-    private void UpdateScaleByVelocity(float velocityY)
-    {
-        float maxVelocity = launchHeight;
-        float normalizedVelocity = Mathf.Clamp(velocityY / maxVelocity, -1f, 1f);
-
-        float scaleY;
-        float scaleXZ;
-
-        if (normalizedVelocity < 0)
-        {
-            float squash = Mathf.Abs(normalizedVelocity) * maxSquashAmount;
-            scaleY = 1f - squash;
-            scaleXZ = 1f + squash * 0.6f;
-        }
-        else if (normalizedVelocity > 0)
-        {
-            float stretch = normalizedVelocity * maxSquashAmount * 0.5f;
-            scaleY = 1f + stretch;
-            scaleXZ = 1f - stretch * 0.4f;
-        }
-        else
-        {
-            scaleY = 1f;
-            scaleXZ = 1f;
-        }
-
-        transform.localScale = new Vector3(
-            originalScale.x * scaleXZ,
-            originalScale.y * scaleY,
-            originalScale.z * scaleXZ
-        );
-    }
-
-    /// <summary>
-    /// 바닥 충돌 시 스쿼시 효과
-    /// </summary>
-    private void ApplyImpactSquash()
-    {
-        float scaleY = 1f - maxSquashAmount;
-        float scaleXZ = 1f + maxSquashAmount * 0.7f;
-
-        transform.localScale = new Vector3(
-            originalScale.x * scaleXZ,
-            originalScale.y * scaleY,
-            originalScale.z * scaleXZ
-        );
-    }
-
-    // ==================== 자석 흡수 (애니메이션만 담당) ====================
-
-    // 흡수 상태
-    private bool isReadyForMagnet = false;
-
-    /// <summary>
-    /// ★ 자석 기능 활성화 여부 (읽기 전용)
+    /// 자석 기능 활성화 여부
     /// </summary>
     public bool EnableMagnet => enableMagnet;
 
@@ -393,8 +330,6 @@ public class DroppedItem : MonoBehaviour
     /// ★ Unit이 흡수 애니메이션을 호출
     /// DroppedItem은 애니메이션만 실행, 인벤 추가는 Unit이 콜백에서 처리
     /// </summary>
-    /// <param name="target">흡수 대상 Unit</param>
-    /// <param name="onComplete">완료 콜백 (Resource, Amount 전달)</param>
     public bool PlayAbsorbAnimation(Unit target, System.Action<ResourceItemSO, int> onComplete)
     {
         if (isBeingMagneted) return false;
@@ -608,6 +543,49 @@ public class DroppedItem : MonoBehaviour
             Debug.Log($"[DroppedItem] {resource?.ResourceName} x{amountToPickUp} picked up by {unit.UnitName}");
             Destroy(gameObject);
             return amountToPickUp;
+        }
+    }
+
+    // ==================== ★ 음식 소비 시스템 ====================
+
+    /// <summary>
+    /// ★ 수량 소비 (음식 먹기 등)
+    /// 수량이 0이 되면 자동으로 파괴됨
+    /// </summary>
+    /// <param name="consumeAmount">소비할 수량</param>
+    /// <returns>실제 소비된 수량</returns>
+    public int ConsumeAmount(int consumeAmount)
+    {
+        if (consumeAmount <= 0) return 0;
+
+        int actualConsumed = Mathf.Min(consumeAmount, amount);
+        amount -= actualConsumed;
+
+        Debug.Log($"[DroppedItem] {resource?.ResourceName} x{actualConsumed} 소비됨 (남은: {amount})");
+
+        if (amount <= 0)
+        {
+            // 수량 0 → 파괴
+            isBeingCarried = true;  // 다른 유닛이 접근 못하게
+            OnPickedUp?.Invoke(this);
+            Destroy(gameObject);
+        }
+
+        return actualConsumed;
+    }
+
+    /// <summary>
+    /// ★ 수량 설정 (외부에서 직접 설정할 때)
+    /// </summary>
+    public void SetAmount(int newAmount)
+    {
+        amount = Mathf.Max(0, newAmount);
+
+        if (amount <= 0)
+        {
+            isBeingCarried = true;
+            OnPickedUp?.Invoke(this);
+            Destroy(gameObject);
         }
     }
 

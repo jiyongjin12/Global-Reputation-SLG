@@ -20,5 +20,5 @@ MonoBehaviour:
   <DropPrefab>k__BackingField: {fileID: 6122101663723949460, guid: 1d47cdc04f253734890f0916dff622cf, type: 3}
   <MaxStackSize>k__BackingField: 99
   <BaseValue>k__BackingField: 1
-  <NutritionValue>k__BackingField: 0
+  <NutritionValue>k__BackingField: 15
   <HealthRestore>k__BackingField: 0
