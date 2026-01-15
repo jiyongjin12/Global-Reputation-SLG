@@ -1,9 +1,9 @@
-using System.Collections.Generic;
+ï»¿using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// À¯´Ö AI - ¹è´Ş ¹× ¾ÆÀÌÅÛ °ü·Ã
-/// ¡Ú ÀúÀå°í ¹è´Ş/¾ÆÀÌÅÛ Áİ±â ¿Ï·á ½Ã ContinuePersistentCommand() È£Ãâ
+/// ï¿½ï¿½ï¿½ï¿½ AI - ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
+/// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½İ±ï¿½ ï¿½Ï·ï¿½ ï¿½ï¿½ ContinuePersistentCommand() È£ï¿½ï¿½
 /// </summary>
 public partial class UnitAI
 {
@@ -13,7 +13,7 @@ public partial class UnitAI
     {
         if (item == null || personalItems.Contains(item)) return;
 
-        // ÀÚ¼® ¾ÆÀÌÅÛÀº º°µµ ¸®½ºÆ®·Î
+        // ï¿½Ú¼ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Æ®ï¿½ï¿½
         if (item.EnableMagnet)
         {
             if (!pendingMagnetItems.Contains(item))
@@ -107,7 +107,7 @@ public partial class UnitAI
     }
 
     /// <summary>
-    /// ¡Ú °³ÀÎ ¾ÆÀÌÅÛ Áİ±â - ¿Ï·á ½Ã Áö¼Ó ¸í·É ·çÇÁ·Î
+    /// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½İ±ï¿½ - ï¿½Ï·ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     /// </summary>
     private void UpdatePickingUpPersonalItem()
     {
@@ -119,7 +119,7 @@ public partial class UnitAI
             return;
         }
 
-        // ¾Ö´Ï¸ŞÀÌ¼Ç ÁßÀÌ¸é ´ë±â
+        // ï¿½Ö´Ï¸ï¿½ï¿½Ì¼ï¿½ ï¿½ï¿½ï¿½Ì¸ï¿½ ï¿½ï¿½ï¿½
         if (currentPersonalItem.IsAnimating)
         {
             float distToItem = Vector3.Distance(transform.position, currentPersonalItem.transform.position);
@@ -129,11 +129,11 @@ public partial class UnitAI
             return;
         }
 
-        // ¿¹¾à
+        // ï¿½ï¿½ï¿½ï¿½
         if (!currentPersonalItem.IsReserved)
             currentPersonalItem.Reserve(unit);
 
-        // °Å¸® Ã¼Å©
+        // ï¿½Å¸ï¿½ Ã¼Å©
         float dist = Vector3.Distance(transform.position, currentPersonalItem.transform.position);
         if (dist > pickupRadius)
         {
@@ -143,18 +143,18 @@ public partial class UnitAI
             return;
         }
 
-        // Áİ±â Å¸ÀÌ¸Ó
+        // ï¿½İ±ï¿½ Å¸ï¿½Ì¸ï¿½
         pickupTimer += Time.deltaTime;
         if (pickupTimer < itemPickupDuration) return;
 
-        // Áİ±â ½ÇÇà
+        // ï¿½İ±ï¿½ ï¿½ï¿½ï¿½ï¿½
         var resource = currentPersonalItem.Resource;
         int originalAmount = currentPersonalItem.Amount;
 
-        // ¡Ú ÀÎº¥ °¡µæ Ã¼Å© - Áö¼Ó ¸í·É ·çÇÁ·Î
+        // ï¿½ï¿½ ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½ Ã¼Å© - ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         if (unit.Inventory.IsFull || (resource != null && !unit.Inventory.CanAddAny(resource)))
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: Áİ±â Áß ÀÎº¥ °¡µæ ¡æ ·çÇÁ·Î");
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½İ±ï¿½ ï¿½ï¿½ ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
             GiveUpRemainingPersonalItems();
             ContinuePersistentCommand();
             return;
@@ -172,21 +172,21 @@ public partial class UnitAI
         }
         else
         {
-            // ÀÏºÎ¸¸ ÁÖ¿üÀ¸¸é ÀÎº¥ °¡µæ
+            // ï¿½ÏºÎ¸ï¿½ ï¿½Ö¿ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½
             GiveUpRemainingPersonalItems();
             ContinuePersistentCommand();
         }
     }
 
     /// <summary>
-    /// ¡Ú ´ÙÀ½ ¾ÆÀÌÅÛ Áİ±â ¶Ç´Â Áö¼Ó ¸í·É ·çÇÁ·Î
+    /// ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½İ±ï¿½ ï¿½Ç´ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     /// </summary>
     private void TryPickupNextOrContinueLoop()
     {
         CleanupItemLists();
         personalItems.RemoveAll(item => item == null || !item || item.Owner != unit || item.IsBeingMagneted);
 
-        // ´õ ÁİÀ» ¾ÆÀÌÅÛ ÀÖÀ½?
+        // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½?
         if (personalItems.Count > 0)
         {
             currentPersonalItem = personalItems[0];
@@ -210,33 +210,33 @@ public partial class UnitAI
             }
         }
 
-        // ¡Ú Áö¼Ó ¸í·ÉÀÌ ÀÖÀ¸¸é ·çÇÁ °è¼Ó
+        // ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
         if (bb.HasPersistentCommand)
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: ¾ÆÀÌÅÛ Áİ±â ¿Ï·á ¡æ ·çÇÁ °è¼Ó");
+            Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½İ±ï¿½ ï¿½Ï·ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½");
             ContinuePersistentCommand();
             return;
         }
 
-        // ÀÏ¹İ º¹±Í
+        // ï¿½Ï¹ï¿½ ï¿½ï¿½ï¿½ï¿½
         ReturnToIdleOrWork();
     }
 
     /// <summary>
-    /// ÀÏ¹İ º¹±Í (Áö¼Ó ¸í·É ¾øÀ» ¶§)
+    /// ï¿½Ï¹ï¿½ ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½)
     /// </summary>
     private void ReturnToIdleOrWork()
     {
         pendingMagnetItems.RemoveAll(item => item == null || !item);
 
-        // ÀÎº¥ ²Ë Â÷¸é ÀúÀå°í·Î
+        // ï¿½Îºï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         if (unit.Inventory.IsFull)
         {
             StartDeliveryToStorage();
             return;
         }
 
-        // ´ë±â ÀÚ¼® ¾ÆÀÌÅÛ Ã³¸®
+        // ï¿½ï¿½ï¿½ ï¿½Ú¼ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ Ã³ï¿½ï¿½
         if (pendingMagnetItems.Count > 0)
         {
             if (HasAbsorbablePendingItems())
@@ -248,7 +248,7 @@ public partial class UnitAI
             return;
         }
 
-        // ÀÌÀü ÀÛ¾÷ º¹±Í
+        // ï¿½ï¿½ï¿½ï¿½ ï¿½Û¾ï¿½ ï¿½ï¿½ï¿½ï¿½
         if (previousTask != null && TaskManager.Instance != null)
         {
             var task = previousTask;
@@ -263,10 +263,10 @@ public partial class UnitAI
             }
         }
 
-        // »õ ÀÛ¾÷ Ã£±â
+        // ï¿½ï¿½ ï¿½Û¾ï¿½ Ã£ï¿½ï¿½
         if (TryPullTask()) return;
 
-        // ÀÎº¥ ºñ¿ì±â
+        // ï¿½Îºï¿½ ï¿½ï¿½ï¿½ï¿½
         if (!unit.Inventory.IsEmpty && ShouldDepositWhenIdle())
         {
             StartDeliveryToStorage();
@@ -403,7 +403,7 @@ public partial class UnitAI
         unit.MoveTo(storagePosition);
         SetBehaviorAndPriority(AIBehaviorState.DeliveringToStorage, TaskPriorityLevel.ItemPickup);
 
-        Debug.Log($"[UnitAI] {unit.UnitName}: ÀúÀå°í·Î ÀÌµ¿");
+        Debug.Log($"[UnitAI] {unit.UnitName}: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ìµï¿½");
     }
 
     protected void UpdateWaitingForStorage()
@@ -462,7 +462,6 @@ public partial class UnitAI
             return;
         }
 
-        // µµÂøÇß´Âµ¥ ¹üÀ§ ¹ÛÀÌ¸é ´Ù½Ã ÀÌµ¿
         if (unit.HasArrivedAtDestination() && !isInRange)
         {
             unit.MoveTo(storagePosition);
@@ -503,20 +502,14 @@ public partial class UnitAI
         }
     }
 
-    /// <summary>
-    /// ¡Ú ¹è´Ş ¿Ï·á ½Ã Áö¼Ó ¸í·É ·çÇÁ·Î
-    /// </summary>
     private void OnDeliveryComplete()
     {
-        // ¡Ú Áö¼Ó ¸í·ÉÀÌ ÀÖÀ¸¸é ·çÇÁ °è¼Ó
         if (bb.HasPersistentCommand)
         {
-            Debug.Log($"[UnitAI] {unit.UnitName}: ÀúÀå ¿Ï·á ¡æ ·çÇÁ °è¼Ó");
             ContinuePersistentCommand();
             return;
         }
 
-        // ÀÏ¹İ º¹±Í
         ReturnToIdleOrWork();
     }
 
@@ -527,12 +520,8 @@ public partial class UnitAI
         depositTimer = 0f;
     }
 
-    /// <summary>
-    /// ±âÁ¸ È£È¯¿ë (Áö¼Ó ¸í·É ¾ø´Â °æ¿ì¿¡¸¸ »ç¿ë)
-    /// </summary>
     protected void ReturnToPreviousTaskOrIdle()
     {
-        // ¡Ú Áö¼Ó ¸í·ÉÀÌ ÀÖÀ¸¸é ·çÇÁ °è¼Ó
         if (bb.HasPersistentCommand)
         {
             ContinuePersistentCommand();
@@ -620,7 +609,6 @@ public partial class UnitAI
         bb.NearestFood = food;
         bb.TargetPosition = food.transform.position;
 
-        // ±¾ÁÖ¸² »óÅÂ¸é ´Ş¸®±â
         if (bb.IsStarving)
             unit.RunTo(food.transform.position);
         else
@@ -639,7 +627,7 @@ public partial class UnitAI
 
         float dist = Vector3.Distance(transform.position, bb.NearestFood.transform.position);
 
-        // ±¾ÁÖ¸² »óÅÂ¿¡¼­ ¸Ö¸é °è¼Ó ´Ş¸®±â
+        // ï¿½ï¿½ï¿½Ö¸ï¿½ ï¿½ï¿½ï¿½Â¿ï¿½ï¿½ï¿½ ï¿½Ö¸ï¿½ ï¿½ï¿½ï¿½ ï¿½Ş¸ï¿½ï¿½ï¿½
         if (bb.IsStarving && dist > 3f)
         {
             unit.RunTo(bb.NearestFood.transform.position);
@@ -682,7 +670,8 @@ public partial class UnitAI
 
     public void SetFoodTarget(Vector3 foodPosition)
     {
-        if (bb.Hunger > hungerSeekThreshold) return;
+        // IsHungryForFood() ì‚¬ìš© (40% ì´í•˜ì¼ ë•Œë§Œ)
+        if (!IsHungryForFood()) return;
 
         bb.TargetPosition = foodPosition;
         unit.MoveTo(foodPosition);

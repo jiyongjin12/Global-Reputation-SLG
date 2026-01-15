@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// 대기열 아이템
-/// </summary>
 [Serializable]
 public class CraftingQueueItem
 {
@@ -22,14 +19,15 @@ public class CraftingQueueItem
 
 /// <summary>
 /// 제작 건물 컴포넌트
+/// ★ 수정: 제작 완료 시 currentWorker의 personalItems에 추가
 /// </summary>
 public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
 {
     [Header("=== 건물 설정 ===")]
-    [SerializeField] private string buildingType = "Cooking";  // "Cooking" or "Crafting"
+    [SerializeField] private string buildingType = "Cooking";
     [SerializeField] private int maxQueueSize = 6;
     [SerializeField] private Transform workPoint;
-    [SerializeField] private Transform dropPoint;              // 아이템 드롭 위치
+    [SerializeField] private Transform dropPoint;
 
     [Header("=== 레시피 목록 ===")]
     [SerializeField] private List<RecipeSO> availableRecipes = new();
@@ -39,20 +37,15 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
     [SerializeField] private Unit currentWorker;
     [SerializeField] private float commandTimestamp;
 
-    // 캐시
     private Building building;
     private WorkTaskType taskType;
 
     #region Properties
-
-    // IWorkstation
     public bool IsOccupied => currentWorker != null;
     public Transform WorkPoint => workPoint;
     public Unit CurrentWorker => currentWorker;
     public bool CanStartWork => craftingQueue.Count > 0;
     public WorkTaskType TaskType => taskType;
-
-    // 자체
     public string BuildingType => buildingType;
     public int QueueCount => craftingQueue.Count;
     public bool HasQueueSpace => craftingQueue.Count < maxQueueSize;
@@ -61,27 +54,22 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
     public float CommandTimestamp => commandTimestamp;
     public bool HasAssignedUnit => currentWorker != null;
     public bool IsPlayerCommanded => commandTimestamp > 0;
-
     #endregion
 
     #region Events
-
     public event Action<IWorkstation> OnWorkCompleted;
     public event Action<IWorkstation> OnWorkAvailable;
     public event Action OnQueueChanged;
     public event Action<CraftingQueueItem> OnCraftingProgress;
-
     #endregion
 
     #region Unity Lifecycle
-
     private void Awake()
     {
         building = GetComponent<Building>();
         if (workPoint == null && building != null)
             workPoint = building.WorkPoint;
 
-        // DropPoint 찾기 (없으면 WorkPoint 사용)
         if (dropPoint == null)
         {
             dropPoint = transform.Find("DropPoint");
@@ -101,11 +89,9 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
     {
         CraftingManager.Instance?.UnregisterBuilding(this);
     }
-
     #endregion
 
     #region Queue Management
-
     public bool AddToQueue(RecipeSO recipe)
     {
         if (recipe == null || !HasQueueSpace) return false;
@@ -125,7 +111,6 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
         OnQueueChanged?.Invoke();
         OnWorkAvailable?.Invoke(this);
 
-        // 작업자가 없으면 Task 등록
         if (currentWorker == null)
             TaskManager.Instance?.AddWorkstationTask(this);
 
@@ -152,11 +137,9 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
                 ResourceManager.Instance?.AddResource(ing.Item.ID, ing.Amount);
         }
     }
-
     #endregion
 
     #region IWorkstation
-
     public bool AssignWorker(Unit worker)
     {
         if (worker == null) return false;
@@ -212,8 +195,8 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
     {
         if (item?.Recipe == null) return;
 
-        // DroppedItem으로 결과물 드롭
-        SpawnDroppedItems(item.Recipe);
+        // ★ currentWorker에게 아이템 할당
+        SpawnDroppedItems(item.Recipe, currentWorker);
 
         Debug.Log($"[CraftingBuilding] 제작 완료: {item.Recipe.RecipeName}");
 
@@ -227,25 +210,29 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
         }
         else
         {
-            // 대기열 비었으면 Worker 해제 (UnitAI가 IsOccupied 체크로 감지)
             ReleaseWorker();
         }
     }
 
     /// <summary>
-    /// 제작 결과물을 DroppedItem으로 드롭
+    /// ★ 수정: worker가 있으면 해당 유닛의 personalItems에 추가
     /// </summary>
-    private void SpawnDroppedItems(RecipeSO recipe)
+    private void SpawnDroppedItems(RecipeSO recipe, Unit worker)
     {
         if (recipe.Outputs == null || recipe.Outputs.Length == 0) return;
 
         Vector3 spawnPos = dropPoint != null ? dropPoint.position : transform.position;
 
+        // ★ 바운스 애니메이션을 위해 y값 보정
+        if (spawnPos.y < 1f)
+            spawnPos.y = 1f;
+
+        UnitAI workerAI = worker?.GetComponent<UnitAI>();
+
         foreach (var output in recipe.Outputs)
         {
             if (output.Item == null) continue;
 
-            // ResourceItemSO에서 Prefab 가져오기
             GameObject prefab = output.Item.DropPrefab;
             if (prefab == null)
             {
@@ -253,11 +240,9 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
                 continue;
             }
 
-            // 드롭할 수량 계산 (MinAmount ~ MaxAmount 사이 랜덤)
             int amount = UnityEngine.Random.Range(output.MinAmount, output.MaxAmount + 1);
             if (amount <= 0) continue;
 
-            // DroppedItem 생성
             GameObject droppedObj = Instantiate(prefab, spawnPos, Quaternion.identity);
             DroppedItem droppedItem = droppedObj.GetComponent<DroppedItem>();
 
@@ -266,18 +251,23 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
                 droppedItem.Initialize(output.Item, amount);
                 droppedItem.PlayDropAnimation(spawnPos);
 
-                // ★ TaskManager에 등록하여 유닛들이 줍도록
-                TaskManager.Instance?.AddPickupItemTask(droppedItem);
-
-                Debug.Log($"[CraftingBuilding] 아이템 드롭: {output.Item.ResourceName} x{amount}");
+                // ★ Worker가 있으면 개인 소유로 설정
+                if (workerAI != null)
+                {
+                    workerAI.AddPersonalItem(droppedItem);
+                    Debug.Log($"[CraftingBuilding] 아이템을 {worker.UnitName}의 개인 소유로 설정: {output.Item.ResourceName} x{amount}");
+                }
+                else
+                {
+                    TaskManager.Instance?.AddPickupItemTask(droppedItem);
+                    Debug.Log($"[CraftingBuilding] 아이템 드롭 (공용): {output.Item.ResourceName} x{amount}");
+                }
             }
         }
     }
-
     #endregion
 
     #region Player Command
-
     public void AssignByPlayerCommand(Unit unit)
     {
         if (unit == null) return;
@@ -287,7 +277,6 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
         currentWorker = unit;
         commandTimestamp = Time.time;
     }
-
     #endregion
 
 #if UNITY_EDITOR
@@ -297,6 +286,12 @@ public class CraftingBuildingComponent : MonoBehaviour, IWorkstation
         {
             Gizmos.color = buildingType == "Cooking" ? Color.yellow : Color.cyan;
             Gizmos.DrawWireSphere(workPoint.position, 0.4f);
+        }
+
+        if (dropPoint != null)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawWireSphere(dropPoint.position, 0.3f);
         }
     }
 #endif

@@ -6,7 +6,7 @@ using UnityEngine;
 /// <summary>
 /// 작업 게시판 (Job Board 패턴)
 /// 유닛에게 직접 할당하지 않고, 유닛이 Pull하는 방식
-/// ★ 우선순위: 건설 > 워크스테이션 > 채집 > 아이템 줍기 > 기타
+/// ★ 우선순위: 건설 > 워크스테이션 > 아이템 줍기 > 채집
 /// </summary>
 public class TaskManager : MonoBehaviour
 {
@@ -220,7 +220,7 @@ public class TaskManager : MonoBehaviour
 
     /// <summary>
     /// 가장 가까운 적합한 작업 찾기 (작업 타입 우선순위 적용)
-    /// ★ 우선순위: 건설 > 워크스테이션 > 아이템 > 채집
+    /// ★ 우선순위: 건설 > 워크스테이션 > 아이템 줍기 > 채집
     /// </summary>
     public PostedTask FindNearestTask(Unit unit, TaskType[] preferredTypes = null)
     {
@@ -464,21 +464,24 @@ public class TaskManager : MonoBehaviour
 
     /// <summary>
     /// 자동 작업 시 유닛 타입 체크
-    /// ★ Fighter: 자동으로 채집 안 함, 하지만 건설은 함
+    /// ★ 수정: PickupItem은 모든 유닛이 수행 가능 (음식 줍기 등)
     /// </summary>
     private bool CanUnitDoTask(Unit unit, TaskData data)
     {
         switch (data.Type)
         {
             case TaskType.Harvest:
-            case TaskType.PickupItem:
             case TaskType.DeliverToStorage:
             case TaskType.Workstation:
                 // Worker만 자동으로 이 작업들 수행
                 return unit.Type == UnitType.Worker;
 
+            case TaskType.PickupItem:
+                // ★ 모든 유닛이 아이템 줍기 가능
+                return true;
+
             case TaskType.Construct:
-                // ★ 건설은 모든 타입 가능
+                // 건설은 모든 타입 가능
                 return true;
 
             case TaskType.Attack:

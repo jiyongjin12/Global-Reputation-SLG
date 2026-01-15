@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -16,15 +17,15 @@ public enum AIBehaviorState
     ExecutingCommand,
     WorkingAtStation,
     Socializing,
-    GoingToSleep,   // ★ 추가: 침대로 이동 중
-    Sleeping        // ★ 추가: 수면 중
+    GoingToSleep,
+    Sleeping
 }
 
 public enum TaskPriorityLevel
 {
     PlayerCommand = 0,
     Survival = 1,
-    Sleep = 2,          // ★ 추가: 수면 (밤에만)
+    Sleep = 2,
     Construction = 3,
     Workstation = 4,
     ItemPickup = 5,
@@ -51,13 +52,11 @@ public enum DeliveryPhase
 
 /// <summary>
 /// 유닛 AI - Core
-/// Partial class로 분할됨:
-/// - UnitAI.cs (Core)
-/// - UnitAI_Work.cs (작업)
-/// - UnitAI_Delivery.cs (배달/아이템)
-/// - UnitAI_Command.cs (명령/자유행동)
-/// - UnitAI_Sleep.cs (수면)
-/// - UnitAI_Food.cs (음식) ★ 추가
+/// 
+/// ★ 수정사항:
+/// - 배고픔: unit.DecreaseHunger() 사용 (Unit과 Blackboard 동기화)
+/// - NavMesh 복구: 더 강력한 예외처리 (agent 재활성화, Warp, GameObject 재활성화)
+/// - 의도적 멈춤 구분 (isStopped, isPaused 등)
 /// </summary>
 [RequireComponent(typeof(Unit))]
 public partial class UnitAI : MonoBehaviour
@@ -114,10 +113,10 @@ public partial class UnitAI : MonoBehaviour
     [SerializeField] private float wanderRadius = 10f;
 
     [Header("=== 배고픔 설정 ===")]
-    [SerializeField] private float hungerDecreasePerMinute = 3f;
-    [SerializeField] private float foodSearchRadius = 20f;
-    [SerializeField] private float hungerSeekThreshold = 50f;
-    [SerializeField] private float hungerCriticalThreshold = 20f;
+    [Tooltip("분당 배고픔 감소량")]
+    [SerializeField] private float hungerDecreasePerMinute = 10f;  // 10분에 100% → 0%
+    [Tooltip("음식 찾기 범위")]
+    [SerializeField] private float foodSearchRadius = 30f;
 
     [Header("=== 아이템 줍기 ===")]
     [SerializeField] private float itemPickupDuration = 1f;
@@ -135,72 +134,67 @@ public partial class UnitAI : MonoBehaviour
     [SerializeField] private float socialSearchRadius = 8f;
 
     [Header("=== 이동 안정성 ===")]
-    [SerializeField] private float stuckCheckInterval = 1f;
-    [SerializeField] private float stuckThreshold = 0.1f;
-    [SerializeField] private int maxStuckCount = 3;
+    [SerializeField] private float stuckCheckInterval = 0.5f;  // ★ 더 자주 체크
+    [SerializeField] private float stuckThreshold = 0.05f;     // ★ 더 민감하게
+    [SerializeField] private int maxStuckCount = 4;
+    [SerializeField] private float pathfindingTimeout = 3f;    // ★ 경로 탐색 타임아웃
 
     [Header("=== 디버그 ===")]
     [SerializeField] private AIBehaviorState currentBehavior = AIBehaviorState.Idle;
     [SerializeField] private TaskPriorityLevel currentPriority = TaskPriorityLevel.FreeWill;
+    [SerializeField] private int debugStuckCount = 0;  // ★ 디버그용
 
     // ==================== Protected Fields ====================
 
-    // Components
     protected Unit unit;
     protected UnitBlackboard bb;
     protected NavMeshAgent agent;
     protected UnitMovement movement;
     protected UnitSocialInteraction socialInteraction;
 
-    // Task Context
     protected TaskContext taskContext = new();
     protected PostedTask previousTask;
 
-    // Timers
     protected float lastDecisionTime;
     protected float pickupTimer;
     protected float magnetAbsorbTimer;
     protected float lastStorageCheckTime = -10f;
 
-    // Item Management
     protected List<DroppedItem> personalItems = new();
     protected List<DroppedItem> pendingMagnetItems = new();
     protected DroppedItem currentPersonalItem;
 
-    // Workstation
     protected IWorkstation currentWorkstation;
     protected bool isWorkstationWorkStarted;
 
-    // Delivery
     protected DeliveryPhase deliveryPhase = DeliveryPhase.None;
     protected Vector3 storagePosition;
     protected StorageComponent targetStorage;
     protected float depositTimer;
 
-    // Social
     protected Unit socialTarget;
     protected bool isApproachingForSocial;
 
-    // ★ 수면 관련
     protected BedComponent targetBed;
     protected bool isSleeping;
     protected bool isGoingToSleep;
 
-    // 명령 대기 플래그
     protected bool isWaitingForCommand = false;
 
-    // 이동 멈춤 감지용
+    // ★ NavMesh 멈춤 감지용 (강화됨)
     private Vector3 lastPosition;
     private float lastStuckCheckTime;
     private int stuckCount;
     private bool isRecoveringFromStuck;
+    private float pathfindingStartTime;
+    private bool isPathfinding;
+    private int recoveryAttempts = 0;
+    private const int MAX_RECOVERY_ATTEMPTS = 3;
 
-    // Cache
     protected bool hasStorageBuilding;
     protected const float STORAGE_CHECK_INTERVAL = 5f;
     protected const float MAGNET_ABSORB_INTERVAL = 0.2f;
 
-    // Debug
     protected Vector3 debugBuildingCenter;
     protected float debugBoxHalfX, debugBoxHalfZ;
 
@@ -241,14 +235,28 @@ public partial class UnitAI : MonoBehaviour
     {
         if (bb == null || !bb.IsAlive) return;
 
-        // 배고픔 감소 (수면 중에는 느리게)
-        float hungerMultiplier = isSleeping ? 0.3f : 1f;
-        bb.DecreaseHunger((hungerDecreasePerMinute / 60f) * Time.deltaTime * hungerMultiplier);
+        // ★ 테스트용: H키 누르면 배고픔 즉시 30% 감소
+        if (Input.GetKeyDown(KeyCode.H))
+        {
+            unit.DecreaseHunger(30f);
+            Debug.Log($"<color=orange>[UnitAI] {unit.UnitName}: 테스트 - 배고픔 30% 감소! 현재={unit.Hunger:F0}%</color>");
+        }
 
-        if (bb.IsStarving)
+        // ★ 배고픔 감소 - unit.DecreaseHunger() 사용 (Unit과 Blackboard 동기화)
+        float hungerMultiplier = isSleeping ? 0.3f : 1f;
+        float decreaseAmount = (hungerDecreasePerMinute / 60f) * Time.deltaTime * hungerMultiplier;
+        unit.DecreaseHunger(decreaseAmount);
+
+        // 디버그: 10초마다 상태 출력
+        if (Time.frameCount % 600 == 0)
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: 허기={unit.Hunger:F0}%, 행동={currentBehavior}, 배고픔={IsHungryForFood()}, 배부름={IsSatisfied()}");
+        }
+
+        if (unit.IsStarving)
             unit.TakeDamage(Time.deltaTime * 5f);
 
-        // 이동 멈춤 감지 및 복구
+        // ★ NavMesh 멈춤 감지 및 복구 (강화됨)
         CheckAndRecoverFromStuck();
 
         // 의사결정
@@ -258,31 +266,74 @@ public partial class UnitAI : MonoBehaviour
             lastDecisionTime = Time.time;
         }
 
-        // 자석 아이템 흡수 체크 (Unitai_delivery.cs에 구현됨)
         TryAbsorbNearbyMagnetItems();
-
-        // 현재 행동 실행
         ExecuteCurrentBehavior();
     }
 
-    // ==================== Stuck Detection ====================
+    // ==================== ★ NavMesh Stuck Detection (강화됨) ====================
 
     private void CheckAndRecoverFromStuck()
     {
         if (Time.time - lastStuckCheckTime < stuckCheckInterval) return;
-
         lastStuckCheckTime = Time.time;
 
-        // 이동 중인지 확인
-        if (agent == null || !agent.hasPath || agent.remainingDistance < 0.5f)
+        // ★ agent 기본 유효성 체크
+        if (agent == null)
         {
-            stuckCount = 0;
-            isRecoveringFromStuck = false;
+            ResetStuckState();
             return;
         }
 
-        // 이동 거리 확인
+        // ★ NavMesh 위에 없으면 즉시 복구 시도
+        if (!agent.isOnNavMesh)
+        {
+            Debug.LogWarning($"<color=red>[UnitAI] {unit.UnitName}: NavMesh 밖에 있음! 복구 시도...</color>");
+            ForceRecoverNavMesh();
+            return;
+        }
+
+        // ★ 의도적인 멈춤 상태면 스킵
+        if (IsIntentionallyStopped())
+        {
+            ResetStuckState();
+            return;
+        }
+
+        // ★ 경로 탐색 중인지 체크
+        if (agent.pathPending)
+        {
+            if (!isPathfinding)
+            {
+                isPathfinding = true;
+                pathfindingStartTime = Time.time;
+            }
+            else if (Time.time - pathfindingStartTime > pathfindingTimeout)
+            {
+                Debug.LogWarning($"<color=red>[UnitAI] {unit.UnitName}: 경로 탐색 타임아웃!</color>");
+                HandlePathfindingFailure();
+            }
+            return;
+        }
+        isPathfinding = false;
+
+        // ★ 경로 상태 체크
+        if (agent.pathStatus == NavMeshPathStatus.PathInvalid)
+        {
+            Debug.LogWarning($"[UnitAI] {unit.UnitName}: 유효하지 않은 경로!");
+            HandlePathfindingFailure();
+            return;
+        }
+
+        // ★ 이동 중인지 확인
+        if (!agent.hasPath || agent.remainingDistance < agent.stoppingDistance + 0.1f)
+        {
+            ResetStuckState();
+            return;
+        }
+
+        // ★ 이동 거리 확인
         float movedDistance = Vector3.Distance(transform.position, lastPosition);
+        debugStuckCount = stuckCount;
 
         if (movedDistance < stuckThreshold)
         {
@@ -290,47 +341,240 @@ public partial class UnitAI : MonoBehaviour
 
             if (stuckCount >= maxStuckCount && !isRecoveringFromStuck)
             {
+                Debug.Log($"<color=yellow>[UnitAI] {unit.UnitName}: 멈춤 감지! (이동거리={movedDistance:F3}, 횟수={stuckCount})</color>");
                 RecoverFromStuck();
             }
         }
         else
         {
-            stuckCount = 0;
-            isRecoveringFromStuck = false;
+            ResetStuckState();
         }
 
         lastPosition = transform.position;
     }
 
+    /// <summary>
+    /// ★ 의도적으로 멈춘 상태인지 확인
+    /// </summary>
+    private bool IsIntentionallyStopped()
+    {
+        // NavMeshAgent가 명시적으로 멈춤
+        if (agent.isStopped)
+            return true;
+
+        // UnitMovement가 일시정지 상태
+        if (movement != null && movement.IsPaused)
+            return true;
+
+        // 이동이 필요없는 행동들
+        switch (currentBehavior)
+        {
+            case AIBehaviorState.Idle:
+            case AIBehaviorState.Working:
+            case AIBehaviorState.WorkingAtStation:
+            case AIBehaviorState.Sleeping:
+            case AIBehaviorState.Socializing:
+                return true;
+        }
+
+        // 작업 중 (Working 페이즈)
+        if (taskContext.IsWorking)
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// ★ 멈춤 상태 리셋
+    /// </summary>
+    private void ResetStuckState()
+    {
+        stuckCount = 0;
+        isRecoveringFromStuck = false;
+        recoveryAttempts = 0;
+    }
+
+    /// <summary>
+    /// ★ 멈춤 상태에서 복구 (단계별 시도)
+    /// </summary>
     private void RecoverFromStuck()
     {
         isRecoveringFromStuck = true;
-        Debug.Log($"[UnitAI] {unit.UnitName}: 멈춤 감지 → 복구 시도");
+        recoveryAttempts++;
 
-        // 현재 목적지 저장
         Vector3 destination = agent.destination;
 
-        // NavMesh에서 가까운 유효한 위치 찾기
-        if (NavMesh.SamplePosition(transform.position + Random.insideUnitSphere * 2f, out NavMeshHit hit, 3f, NavMesh.AllAreas))
-        {
-            // 일단 옆으로 이동 후 다시 목적지로
-            agent.SetDestination(hit.position);
+        Debug.Log($"<color=cyan>[UnitAI] {unit.UnitName}: 복구 시도 #{recoveryAttempts}</color>");
 
-            // 0.5초 후 원래 목적지로
-            StartCoroutine(ResumeAfterRecovery(destination));
+        // ★ 단계 1: 주변 유효 위치로 이동 시도
+        if (recoveryAttempts == 1)
+        {
+            Vector3 randomOffset = Random.insideUnitSphere * 2f;
+            randomOffset.y = 0;
+
+            if (NavMesh.SamplePosition(transform.position + randomOffset, out NavMeshHit hit, 3f, NavMesh.AllAreas))
+            {
+                agent.SetDestination(hit.position);
+                StartCoroutine(ResumeAfterRecovery(destination, 0.5f));
+                stuckCount = 0;
+                return;
+            }
+        }
+
+        // ★ 단계 2: Warp로 강제 위치 재설정
+        if (recoveryAttempts == 2)
+        {
+            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+            {
+                Debug.Log($"[UnitAI] {unit.UnitName}: Warp로 복구 시도");
+                agent.Warp(hit.position);
+                agent.SetDestination(destination);
+                stuckCount = 0;
+                isRecoveringFromStuck = false;
+                return;
+            }
+        }
+
+        // ★ 단계 3: Agent 재활성화
+        if (recoveryAttempts >= MAX_RECOVERY_ATTEMPTS)
+        {
+            Debug.Log($"<color=orange>[UnitAI] {unit.UnitName}: Agent 재활성화로 복구 시도</color>");
+            StartCoroutine(ReactivateAgent(destination));
+            return;
+        }
+
+        // 복구 실패 → 작업 취소
+        Debug.LogWarning($"[UnitAI] {unit.UnitName}: 복구 실패, 작업 취소");
+        CompleteCurrentTask();
+        ResetStuckState();
+    }
+
+    /// <summary>
+    /// ★ NavMesh 강제 복구 (NavMesh 밖에 있을 때)
+    /// </summary>
+    private void ForceRecoverNavMesh()
+    {
+        // 가장 가까운 NavMesh 위치 찾기
+        if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 10f, NavMesh.AllAreas))
+        {
+            Debug.Log($"[UnitAI] {unit.UnitName}: NavMesh로 워프 ({hit.position})");
+
+            // Agent 비활성화 후 위치 이동, 다시 활성화
+            agent.enabled = false;
+            transform.position = hit.position;
+            agent.enabled = true;
+
+            if (agent.isOnNavMesh)
+            {
+                Debug.Log($"<color=green>[UnitAI] {unit.UnitName}: NavMesh 복구 성공!</color>");
+            }
         }
         else
         {
-            // 그냥 현재 작업 취소
-            CompleteCurrentTask();
+            Debug.LogError($"[UnitAI] {unit.UnitName}: NavMesh 찾기 실패! GameObject 재활성화 시도");
+            StartCoroutine(ReactivateGameObject());
         }
-
-        stuckCount = 0;
     }
 
-    private System.Collections.IEnumerator ResumeAfterRecovery(Vector3 originalDestination)
+    /// <summary>
+    /// ★ 경로 탐색 실패 처리
+    /// </summary>
+    private void HandlePathfindingFailure()
     {
-        yield return new WaitForSeconds(0.5f);
+        isPathfinding = false;
+        agent.ResetPath();
+
+        if (!agent.isOnNavMesh)
+        {
+            ForceRecoverNavMesh();
+        }
+        else
+        {
+            // 현재 위치에서 재시작
+            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+            {
+                agent.Warp(hit.position);
+            }
+        }
+
+        CompleteCurrentTask();
+    }
+
+    /// <summary>
+    /// ★ Agent 재활성화 코루틴
+    /// </summary>
+    private IEnumerator ReactivateAgent(Vector3 destination)
+    {
+        Vector3 currentPos = transform.position;
+
+        agent.enabled = false;
+        yield return null;  // 1프레임 대기
+
+        // NavMesh 위 위치 찾기
+        if (NavMesh.SamplePosition(currentPos, out NavMeshHit hit, 5f, NavMesh.AllAreas))
+        {
+            transform.position = hit.position;
+        }
+
+        agent.enabled = true;
+        yield return null;  // 1프레임 대기
+
+        if (agent.isOnNavMesh)
+        {
+            agent.SetDestination(destination);
+            Debug.Log($"<color=green>[UnitAI] {unit.UnitName}: Agent 재활성화 성공!</color>");
+        }
+        else
+        {
+            Debug.LogWarning($"[UnitAI] {unit.UnitName}: Agent 재활성화 후에도 NavMesh 밖!");
+            StartCoroutine(ReactivateGameObject());
+        }
+
+        ResetStuckState();
+    }
+
+    /// <summary>
+    /// ★ GameObject 재활성화 코루틴 (최후의 수단)
+    /// </summary>
+    private IEnumerator ReactivateGameObject()
+    {
+        Debug.Log($"<color=red>[UnitAI] {unit.UnitName}: GameObject 재활성화 시도 (최후의 수단)</color>");
+
+        Vector3 currentPos = transform.position;
+        Quaternion currentRot = transform.rotation;
+
+        // NavMesh 위 위치 찾기
+        Vector3 targetPos = currentPos;
+        if (NavMesh.SamplePosition(currentPos, out NavMeshHit hit, 15f, NavMesh.AllAreas))
+        {
+            targetPos = hit.position;
+        }
+
+        gameObject.SetActive(false);
+        yield return new WaitForSeconds(0.1f);
+
+        transform.position = targetPos;
+        transform.rotation = currentRot;
+
+        gameObject.SetActive(true);
+        yield return null;
+
+        if (agent != null && agent.isOnNavMesh)
+        {
+            Debug.Log($"<color=green>[UnitAI] {unit.UnitName}: GameObject 재활성화 성공!</color>");
+        }
+        else
+        {
+            Debug.LogError($"[UnitAI] {unit.UnitName}: GameObject 재활성화 후에도 문제 발생!");
+        }
+
+        ResetStuckState();
+        CompleteCurrentTask();
+    }
+
+    private IEnumerator ResumeAfterRecovery(Vector3 originalDestination, float delay)
+    {
+        yield return new WaitForSeconds(delay);
 
         if (agent != null && agent.isOnNavMesh)
         {
@@ -344,13 +588,11 @@ public partial class UnitAI : MonoBehaviour
 
     private void MakeDecision()
     {
-        // ★ 명령 대기 중이면 플레이어 명령만 처리
         if (isWaitingForCommand)
         {
             if (bb.HasPlayerCommand && bb.PlayerCommand != null)
             {
                 isWaitingForCommand = false;
-                // 수면 중이면 강제 기상
                 InterruptSleepForCommand();
                 ExecutePlayerCommand();
             }
@@ -361,19 +603,18 @@ public partial class UnitAI : MonoBehaviour
         if (bb.HasPlayerCommand && bb.PlayerCommand != null)
         {
             InterruptCurrentTask();
-            // 수면 중이면 강제 기상
             InterruptSleepForCommand();
             ExecutePlayerCommand();
             return;
         }
 
-        // 2. 생존 - 극심한 배고픔
-        if (bb.Hunger <= hungerCriticalThreshold && currentPriority > TaskPriorityLevel.Survival)
+        // 2. 생존 - 배고픔 (40% 이하면 음식 찾기)
+        // ★ IsHungryForFood() 사용 (40% 이하)
+        if (IsHungryForFood() && currentPriority >= TaskPriorityLevel.Survival)
         {
-            // ★ TrySeekFoodNew() 사용
+            Debug.Log($"<color=orange>[UnitAI] {unit.UnitName}: 배고픔! (허기={unit.Hunger:F0}%) → 음식 찾기</color>");
             if (TrySeekFoodNew())
             {
-                // 수면 취소
                 CancelSleep();
                 InterruptCurrentTask();
                 SetBehaviorAndPriority(AIBehaviorState.SeekingFood, TaskPriorityLevel.Survival);
@@ -381,36 +622,29 @@ public partial class UnitAI : MonoBehaviour
             }
         }
 
-        // ★ 3. 수면 - 밤 시간
+        // 3. 수면
         if (NeedsSleep() && currentPriority > TaskPriorityLevel.Sleep)
         {
             InterruptCurrentTask();
-            if (TryGoToSleep())
-            {
-                return;
-            }
+            if (TryGoToSleep()) return;
         }
 
-        // 수면 중/이동 중이면 다른 행동 안 함
-        if (isSleeping || isGoingToSleep)
-        {
-            return;
-        }
+        if (isSleeping || isGoingToSleep) return;
 
-        // 4. 현재 작업 진행 중이면 유지
+        // 4. 현재 작업 진행 중
         if (taskContext.HasTask) return;
 
-        // 5. 저장고 배달 중이면 유지
+        // 5. 저장고 배달 중
         if (currentBehavior == AIBehaviorState.DeliveringToStorage) return;
 
-        // 6. 저장고 대기 중이면 건설 작업만 확인
+        // 6. 저장고 대기 중
         if (currentBehavior == AIBehaviorState.WaitingForStorage)
         {
             TryPullConstructionTask();
             return;
         }
 
-        // 7. 상호작용 중이면 유지
+        // 7. 상호작용 중
         if (currentBehavior == AIBehaviorState.Socializing) return;
 
         // 8. 아이템 정리
@@ -424,10 +658,10 @@ public partial class UnitAI : MonoBehaviour
             return;
         }
 
-        // 10. 대기 중인 자석 아이템 처리
+        // 10. 대기 중인 자석 아이템
         if (HandlePendingMagnetItems()) return;
 
-        // 11. 인벤토리 꽉 참 → 저장고로
+        // 11. 인벤토리 꽉 참
         if (unit.Inventory.IsFull)
         {
             if (currentBehavior != AIBehaviorState.DeliveringToStorage)
@@ -437,15 +671,19 @@ public partial class UnitAI : MonoBehaviour
             }
         }
 
-        // 12. 일반 배고픔 시 음식 찾기
-        // ★ TrySeekFoodNew() 사용
-        if (bb.Hunger <= hungerSeekThreshold && TrySeekFoodNew())
+        // 12. 일반 배고픔 체크 (이미 위에서 처리됨, 여기서는 재확인)
+        // ★ 40% 이하면 음식 찾기 (이미 SeekingFood 중이 아닐 때만)
+        if (IsHungryForFood() && currentBehavior != AIBehaviorState.SeekingFood)
         {
-            SetBehaviorAndPriority(AIBehaviorState.SeekingFood, TaskPriorityLevel.Survival);
-            return;
+            Debug.Log($"[UnitAI] {unit.UnitName}: 배고픔 재확인 (허기={unit.Hunger:F0}%)");
+            if (TrySeekFoodNew())
+            {
+                SetBehaviorAndPriority(AIBehaviorState.SeekingFood, TaskPriorityLevel.Survival);
+                return;
+            }
         }
 
-        // 13. Idle 상태에서의 행동
+        // 13. Idle 상태
         if (currentBehavior == AIBehaviorState.Idle || currentBehavior == AIBehaviorState.Wandering)
         {
             if (TryPullTask()) return;
@@ -505,7 +743,6 @@ public partial class UnitAI : MonoBehaviour
                 UpdateWandering();
                 break;
             case AIBehaviorState.SeekingFood:
-                // ★ UpdateSeekingFoodNew() 사용
                 UpdateSeekingFoodNew();
                 break;
             case AIBehaviorState.Working:
@@ -529,7 +766,6 @@ public partial class UnitAI : MonoBehaviour
             case AIBehaviorState.Socializing:
                 UpdateSocializing();
                 break;
-            // ★ 수면 관련
             case AIBehaviorState.GoingToSleep:
                 UpdateGoingToSleep();
                 break;
@@ -562,7 +798,7 @@ public partial class UnitAI : MonoBehaviour
 
     private void OnHungerCritical()
     {
-        Debug.Log($"[UnitAI] {unit.UnitName}: 배고파!");
+        Debug.Log($"<color=orange>[UnitAI] {unit.UnitName}: 배고파! (Unit.Hunger={unit.Hunger:F1})</color>");
     }
 
     private void OnMentalHealthCritical()
@@ -605,5 +841,9 @@ public partial class UnitAI : MonoBehaviour
     public void AddPlayerCommand(UnitTask task) { }
     public void AddPlayerCommandImmediate(UnitTask task) { }
     public void OnTaskCompleted(UnitTask task) { }
-    public void OnFoodEaten(float nutrition) => bb?.Eat(nutrition);
+
+    /// <summary>
+    /// ★ 음식 먹기 - unit.Eat() 사용
+    /// </summary>
+    public void OnFoodEaten(float nutrition) => unit.Eat(nutrition);
 }
